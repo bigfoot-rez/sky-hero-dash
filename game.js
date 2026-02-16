@@ -1,7 +1,7 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// HUD elements
+// HUD
 const scoreText = document.getElementById("scoreText");
 const bestText = document.getElementById("bestText");
 const playerNameText = document.getElementById("playerName");
@@ -13,23 +13,23 @@ const overlay = document.getElementById("overlay");
 const overlayTitle = document.getElementById("overlayTitle");
 const startButton = document.getElementById("startButton");
 
-const LS_NAME_KEY = "flappy_player_name_v1";
-const LS_BOARD_KEY = "flappy_leaderboard_v1"; // per device leaderboard
+// LocalStorage keys (per device)
+const LS_NAME_KEY = "skyhero_player_name_v1";
+const LS_BOARD_KEY = "skyhero_leaderboard_v1";
+const LS_BEST_KEY = "skyhero_best_v1";
 
 // Game state
-let bird, pipes, score, best, gameOver, started;
+let hero, buildings, score, best, gameOver, started;
 let animationId;
-let pipeSpawnTimer = 0;
+let frame = 0;
 
-// Physics / difficulty
-const GRAVITY = 0.6;
-const LIFT = -10;
-const PIPE_SPEED = 2.5;
-const PIPE_WIDTH = 60;
-const PIPE_GAP = 160;
-const PIPE_SPAWN_EVERY = 90; // frames at ~60fps
-
-function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+// Tuning
+const GRAVITY = 0.55;
+const LIFT = -10.0;
+const BUILDING_SPEED = 2.6;
+const BUILDING_WIDTH = 64;
+const GAP_SIZE = 170;
+const SPAWN_EVERY_FRAMES = 90; // ~1.5s at 60fps
 
 function getPlayerName() {
   return localStorage.getItem(LS_NAME_KEY) || "";
@@ -46,7 +46,7 @@ function setPlayerName(name) {
 function promptForName() {
   const current = getPlayerName();
   const name = prompt("Pick a nickname (max 16 chars):", current || "");
-  if (name === null) return; // user cancelled
+  if (name === null) return; // cancelled
   if (!setPlayerName(name)) alert("Nickname can’t be empty.");
   renderLeaderboard();
 }
@@ -56,11 +56,9 @@ function loadLeaderboard() {
     const raw = localStorage.getItem(LS_BOARD_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
-    // sanitize
     return parsed
       .filter(x => x && typeof x.name === "string" && typeof x.score === "number")
-      .map(x => ({ name: x.name.slice(0, 16), score: Math.max(0, Math.floor(x.score)) }))
-      .slice(0, 50);
+      .map(x => ({ name: x.name.slice(0, 16), score: Math.max(0, Math.floor(x.score)) }));
   } catch {
     return [];
   }
@@ -70,14 +68,11 @@ function saveLeaderboard(entries) {
   localStorage.setItem(LS_BOARD_KEY, JSON.stringify(entries));
 }
 
-function submitScoreToLeaderboard(finalScore) {
+function submitScore(scoreValue) {
   const name = getPlayerName() || "Player";
   let board = loadLeaderboard();
-
-  board.push({ name, score: finalScore });
+  board.push({ name, score: scoreValue });
   board.sort((a, b) => b.score - a.score);
-
-  // keep top 5
   board = board.slice(0, 5);
   saveLeaderboard(board);
   renderLeaderboard();
@@ -99,28 +94,6 @@ function renderLeaderboard() {
   }
 }
 
-function initGame() {
-  bird = {
-    x: 70,
-    y: canvas.height * 0.5,
-    w: 30,
-    h: 30,
-    vy: 0,
-  };
-
-  pipes = [];
-  score = 0;
-  best = Math.max(0, Number(localStorage.getItem("flappy_best_v1") || "0"));
-  gameOver = false;
-  started = false;
-  pipeSpawnTimer = 0;
-
-  scoreText.textContent = "0";
-  bestText.textContent = String(best);
-
-  showOverlay("Tap to start");
-}
-
 function showOverlay(title) {
   overlayTitle.textContent = title;
   overlay.classList.remove("hidden");
@@ -130,14 +103,26 @@ function hideOverlay() {
   overlay.classList.add("hidden");
 }
 
-function flap() {
-  if (gameOver) return;
+function initGame() {
+  hero = {
+    x: 80,
+    y: canvas.height * 0.5,
+    w: 34,
+    h: 34,
+    vy: 0
+  };
 
-  if (!started) {
-    started = true;
-    hideOverlay();
-  }
-  bird.vy = LIFT;
+  buildings = [];
+  score = 0;
+  best = Math.max(0, Number(localStorage.getItem(LS_BEST_KEY) || "0"));
+  gameOver = false;
+  started = false;
+  frame = 0;
+
+  scoreText.textContent = "0";
+  bestText.textContent = String(best);
+
+  showOverlay("Tap to start");
 }
 
 function reset() {
@@ -146,143 +131,260 @@ function reset() {
   animationId = requestAnimationFrame(loop);
 }
 
-function spawnPipe() {
-  const margin = 60;
+function flap() {
+  if (gameOver) return;
+
+  if (!started) {
+    started = true;
+    hideOverlay();
+  }
+  hero.vy = LIFT;
+}
+
+function spawnBuildingPair() {
+  const margin = 70;
   const topMin = margin;
-  const topMax = canvas.height - margin - PIPE_GAP;
+  const topMax = canvas.height - margin - GAP_SIZE;
   const top = Math.floor(topMin + Math.random() * (topMax - topMin));
 
-  pipes.push({
+  buildings.push({
     x: canvas.width + 10,
     top,
-    passed: false,
+    passed: false
   });
-}
-
-function update() {
-  if (!started || gameOver) return;
-
-  // bird
-  bird.vy += GRAVITY;
-  bird.y += bird.vy;
-
-  // bounds
-  if (bird.y + bird.h > canvas.height) {
-    bird.y = canvas.height - bird.h;
-    endGame();
-    return;
-  }
-  if (bird.y < 0) {
-    bird.y = 0;
-    endGame();
-    return;
-  }
-
-  // pipes
-  pipeSpawnTimer++;
-  if (pipeSpawnTimer >= PIPE_SPAWN_EVERY) {
-    pipeSpawnTimer = 0;
-    spawnPipe();
-  }
-
-  for (const p of pipes) {
-    p.x -= PIPE_SPEED;
-
-    const pipeRight = p.x + PIPE_WIDTH;
-    const birdRight = bird.x + bird.w;
-    const birdBottom = bird.y + bird.h;
-    const gapBottom = p.top + PIPE_GAP;
-
-    // collision
-    const xOverlap = birdRight > p.x && bird.x < pipeRight;
-    if (xOverlap) {
-      const hitTop = bird.y < p.top;
-      const hitBottom = birdBottom > gapBottom;
-      if (hitTop || hitBottom) {
-        endGame();
-        return;
-      }
-    }
-
-    // score when passing pipe (once)
-    if (!p.passed && pipeRight < bird.x) {
-      p.passed = true;
-      score++;
-      scoreText.textContent = String(score);
-    }
-  }
-
-  // remove offscreen
-  pipes = pipes.filter(p => p.x + PIPE_WIDTH > -20);
-}
-
-function draw() {
-  // background
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // bird
-  ctx.fillStyle = "yellow";
-  ctx.fillRect(bird.x, bird.y, bird.w, bird.h);
-
-  // pipes
-  ctx.fillStyle = "green";
-  for (const p of pipes) {
-    // top pipe
-    ctx.fillRect(p.x, 0, PIPE_WIDTH, p.top);
-    // bottom pipe
-    const gapBottom = p.top + PIPE_GAP;
-    ctx.fillRect(p.x, gapBottom, PIPE_WIDTH, canvas.height - gapBottom);
-  }
-
-  // game over text
-  if (gameOver) {
-    ctx.fillStyle = "red";
-    ctx.font = "36px Arial";
-    ctx.fillText("Game Over", 95, 290);
-    ctx.font = "16px Arial";
-    ctx.fillStyle = "black";
-    ctx.fillText("Press Reset or Tap to Restart", 85, 320);
-  }
 }
 
 function endGame() {
   if (gameOver) return;
   gameOver = true;
 
-  // best score persistent
   if (score > best) {
     best = score;
-    localStorage.setItem("flappy_best_v1", String(best));
+    localStorage.setItem(LS_BEST_KEY, String(best));
     bestText.textContent = String(best);
   }
 
-  submitScoreToLeaderboard(score);
+  submitScore(score);
   showOverlay("Game Over");
 }
 
+/* ---------- Drawing (upgraded graphics) ---------- */
+
+function drawSky() {
+  const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  sky.addColorStop(0, "#87CEEB");
+  sky.addColorStop(1, "#cdeffd");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // subtle clouds
+  ctx.globalAlpha = 0.18;
+  ctx.fillStyle = "#ffffff";
+  for (let i = 0; i < 5; i++) {
+    const cx = (i * 120 + (frame * 0.4)) % (canvas.width + 140) - 70;
+    const cy = 80 + (i % 3) * 40;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+    ctx.arc(cx + 22, cy + 6, 18, 0, Math.PI * 2);
+    ctx.arc(cx - 22, cy + 8, 16, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawHero(x, y) {
+  // shadow
+  ctx.globalAlpha = 0.18;
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.ellipse(x + 18, y + 40, 16, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // cape (animated a bit using frame)
+  const flutter = Math.sin(frame * 0.2) * 4;
+  ctx.fillStyle = "#d10000";
+  ctx.beginPath();
+  ctx.moveTo(x + 6, y + 16);
+  ctx.lineTo(x - 18, y + 22 + flutter);
+  ctx.lineTo(x + 2, y + 34);
+  ctx.closePath();
+  ctx.fill();
+
+  // body suit
+  ctx.fillStyle = "#1f4bff";
+  ctx.fillRect(x, y + 10, 34, 24);
+
+  // belt
+  ctx.fillStyle = "#ffd400";
+  ctx.fillRect(x + 6, y + 26, 22, 4);
+
+  // head
+  ctx.fillStyle = "#ffcc99";
+  ctx.beginPath();
+  ctx.arc(x + 17, y + 6, 10, 0, Math.PI * 2);
+  ctx.fill();
+
+  // mask
+  ctx.fillStyle = "#111";
+  ctx.fillRect(x + 7, y + 2, 20, 6);
+
+  // eye slits
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(x + 10, y + 4, 6, 2);
+  ctx.fillRect(x + 19, y + 4, 6, 2);
+
+  // emblem
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(x + 17, y + 20, 4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawBuilding(x, y, width, height) {
+  // base building
+  ctx.fillStyle = "#7a0a0a";
+  ctx.fillRect(x, y, width, height);
+
+  // darker side shading
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(x + width - 10, y, 10, height);
+  ctx.globalAlpha = 1;
+
+  // brick lines
+  ctx.strokeStyle = "#4e0707";
+  ctx.lineWidth = 1;
+
+  for (let row = y; row < y + height; row += 14) {
+    ctx.beginPath();
+    ctx.moveTo(x, row);
+    ctx.lineTo(x + width, row);
+    ctx.stroke();
+  }
+
+  // staggered vertical brick seams
+  for (let row = 0; row < height; row += 28) {
+    const offset = (row / 28) % 2 === 0 ? 0 : 10;
+    for (let col = x + offset; col < x + width; col += 20) {
+      ctx.beginPath();
+      ctx.moveTo(col, y + row);
+      ctx.lineTo(col, y + row + 14);
+      ctx.stroke();
+    }
+  }
+
+  // windows
+  ctx.fillStyle = "rgba(255, 234, 120, 0.9)";
+  for (let wy = y + 10; wy < y + height - 10; wy += 46) {
+    for (let wx = x + 10; wx < x + width - 12; wx += 22) {
+      ctx.fillRect(wx, wy, 8, 12);
+    }
+  }
+}
+
+/* ---------- Game update / draw loop ---------- */
+
+function update() {
+  if (!started || gameOver) return;
+
+  // physics
+  hero.vy += GRAVITY;
+  hero.y += hero.vy;
+
+  // boundaries
+  if (hero.y + hero.h > canvas.height) {
+    hero.y = canvas.height - hero.h;
+    endGame();
+    return;
+  }
+  if (hero.y < 0) {
+    hero.y = 0;
+    endGame();
+    return;
+  }
+
+  // spawn
+  if (frame % SPAWN_EVERY_FRAMES === 0) {
+    spawnBuildingPair();
+  }
+
+  // move + collide + score
+  for (const b of buildings) {
+    b.x -= BUILDING_SPEED;
+
+    const gapTop = b.top;
+    const gapBottom = b.top + GAP_SIZE;
+    const right = b.x + BUILDING_WIDTH;
+
+    const heroRight = hero.x + hero.w;
+    const heroBottom = hero.y + hero.h;
+
+    const xOverlap = heroRight > b.x && hero.x < right;
+    if (xOverlap) {
+      const hitTop = hero.y < gapTop;
+      const hitBottom = heroBottom > gapBottom;
+      if (hitTop || hitBottom) {
+        endGame();
+        return;
+      }
+    }
+
+    // score when you pass the building pair
+    if (!b.passed && right < hero.x) {
+      b.passed = true;
+      score++;
+      scoreText.textContent = String(score);
+    }
+  }
+
+  // cleanup offscreen
+  buildings = buildings.filter(b => b.x + BUILDING_WIDTH > -40);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  drawSky();
+
+  // buildings (top + bottom)
+  for (const b of buildings) {
+    drawBuilding(b.x, 0, BUILDING_WIDTH, b.top);
+    const gapBottom = b.top + GAP_SIZE;
+    drawBuilding(b.x, gapBottom, BUILDING_WIDTH, canvas.height - gapBottom);
+  }
+
+  drawHero(hero.x, hero.y);
+
+  if (gameOver) {
+    ctx.fillStyle = "rgba(0,0,0,0.8)";
+    ctx.font = "34px Arial";
+    ctx.fillText("Game Over", 98, 290);
+    ctx.font = "14px Arial";
+    ctx.fillText("Tap Reset (or tap canvas) to restart", 78, 320);
+  }
+}
+
 function loop() {
+  frame++;
   update();
   draw();
   animationId = requestAnimationFrame(loop);
 }
 
-/* --- Input handling (and stop mobile double-tap zoom) --- */
+/* ---------- Input / mobile fixes ---------- */
 
-// Prevent double-tap zoom / gesture behaviors
+// prevent double-click zoom behaviors
 document.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
 
-// Use pointer events for best cross-device behavior
+// pointer controls (best for mobile + desktop)
 canvas.addEventListener("pointerdown", (e) => {
   e.preventDefault();
-  // If game over, allow tap to restart quickly
-  if (gameOver) {
-    reset();
-    return;
-  }
-  flap();
+  if (gameOver) reset();
+  else flap();
 }, { passive: false });
 
-// Spacebar flap
+// spacebar
 document.addEventListener("keydown", (e) => {
   if (e.code === "Space") {
     e.preventDefault();
@@ -291,7 +393,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// Buttons
+// buttons
 resetButton.addEventListener("click", () => reset());
 nameButton.addEventListener("click", () => promptForName());
 startButton.addEventListener("click", () => {
@@ -299,14 +401,12 @@ startButton.addEventListener("click", () => {
   else flap();
 });
 
-// Init player name + leaderboard
+/* ---------- Boot ---------- */
 (function boot() {
   const existing = getPlayerName();
   if (existing) playerNameText.textContent = existing;
-  else {
-    // first-time: prompt
-    promptForName();
-  }
+  else promptForName();
+
   renderLeaderboard();
   initGame();
   loop();
