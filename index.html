@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Sky Hero Dash</title>
-  <link rel="stylesheet" href="style.css?v=10" />
+  <link rel="stylesheet" href="style.css?v=11" />
 </head>
 <body>
   <div id="app">
@@ -164,4 +164,29 @@
           <div id="shopPanel" class="panel subtle hidden">
             <div class="panelTitle">Unlockables</div>
             <div class="shopList">
-              <button id
+              <button id="buySpark" class="btn small">Buy Spark Trail (50)</button>
+              <button id="buyNeon" class="btn small">Buy Neon Trail (120)</button>
+            </div>
+            <div class="hint">Earn coins by passing buildings (+1) and grabbing power-ups (+5).</div>
+          </div>
+
+          <div class="menuRow">
+            <button id="changeNameButton" class="btn secondary">Change name</button>
+            <button id="closeSettings" class="btn secondary">Close</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panelTitle">Top 5 (This device)</div>
+          <ol id="localLeaderboard"></ol>
+          <div class="hint">Saved on each phone/browser only.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="game.js?v=11"></script>
+</body>
+</html>

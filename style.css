@@ -72,7 +72,6 @@ canvas{
   place-items: center;
   background: rgba(0,0,0,0.35);
 
-  /* allow scrolling on small phones */
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   padding: 14px 0;
@@ -199,7 +198,6 @@ canvas{
   z-index: 9999;
 }
 
-/* Optional: makes the settings panel itself scroll if it grows huge */
 .scrollPanel{
   max-height: min(72vh, 620px);
   overflow: auto;
