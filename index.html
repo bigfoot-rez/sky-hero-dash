@@ -1,16 +1,41 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-  <title>Luis Flappy Bird</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Flappy Bird — bigfoot-rez</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <canvas id="gameCanvas"></canvas>
-  <div id="hud">
-    <span id="currentScore">Score: 0</span>
-    <span id="highScore">High Score: 0</span>
-    <button id="resetButton">Reset Game</button>
+  <div id="app">
+    <h1 id="title">Flappy Bird</h1>
+
+    <div id="topbar">
+      <div class="pill" id="playerPill">Player: <span id="playerName">—</span></div>
+      <div class="pill">Score: <span id="scoreText">0</span></div>
+      <div class="pill">Best: <span id="bestText">0</span></div>
+      <button id="resetButton" class="btn">Reset</button>
+      <button id="nameButton" class="btn secondary">Change name</button>
+    </div>
+
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+
+    <div id="overlay" class="overlay hidden">
+      <div class="overlayCard">
+        <div id="overlayTitle">Tap to start</div>
+        <div id="overlayHint">Tap / Space to flap</div>
+        <button id="startButton" class="btn">Start</button>
+      </div>
+    </div>
+
+    <div id="leaderboardWrap">
+      <h2>Top 5</h2>
+      <ol id="leaderboard"></ol>
+      <div class="tinyNote">Leaderboard is saved on each device (localStorage).</div>
+    </div>
   </div>
+
   <script src="game.js"></script>
 </body>
 </html>
