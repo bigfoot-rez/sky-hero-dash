@@ -1,11 +1,10 @@
 // ============================
 // SKY HERO DASH
-// v13: splash + version display, goatcounter hook, better animal variety,
-//      powerups now help (Shield + Glide), shield now truly saves you,
-//      add short invulnerability after shield breaks (prevents instant re-hit)
+// v14: hard-fix stuck overlay, add Bee + Skeleton, make Cat vs Fox clearly different,
+//      keep Shield + Glide powerups, add more unlockables (Smoke + Confetti)
 // ============================
 
-const APP_VERSION = "v13";
+const APP_VERSION = "v14";
 
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -60,6 +59,8 @@ const trailSelect = document.getElementById("trailSelect");
 const coinsText = document.getElementById("coinsText");
 const buySpark = document.getElementById("buySpark");
 const buyNeon = document.getElementById("buyNeon");
+const buySmoke = document.getElementById("buySmoke");
+const buyConfetti = document.getElementById("buyConfetti");
 
 const localLeaderboardEl = document.getElementById("localLeaderboard");
 const toast = document.getElementById("toast");
@@ -83,9 +84,9 @@ const LS = {
   name: "skyhero_name_v1",
   best: "skyhero_best_v1",
   coins: "skyhero_coins_v1",
-  unlocks: "skyhero_unlocks_v1",
+  unlocks: "skyhero_unlocks_v2",      // bumped: added smoke/confetti
   settings: "skyhero_settings_v4",
-  cosmetics: "skyhero_cosmetics_v3",
+  cosmetics: "skyhero_cosmetics_v4",  // bumped: added bee/skeleton
   localBoard: "skyhero_localboard_v1",
 };
 
@@ -103,10 +104,10 @@ const SPAWN_EVERY_FRAMES = 90;
 const POWERUP_CHANCE = 0.25;
 const POWERUP_SIZE = 18;
 
-// Power-ups (player-friendly)
-const SHIELD_DURATION_MS = 8000;     // how long you can hold a shield
-const SHIELD_IFRAME_MS = 900;        // after shield breaks, invuln prevents instant re-hit
-const GLIDE_DURATION_MS = 6000;      // easier flight: reduced gravity + slightly stronger flap
+// Power-ups
+const SHIELD_DURATION_MS = 8000;
+const SHIELD_IFRAME_MS = 900;
+const GLIDE_DURATION_MS = 6000;
 
 // Particles
 const RAIN_COUNT = 90;
@@ -125,7 +126,7 @@ let frame = 0;
 
 let speedMult = 1;
 
-// Power-up active windows
+// Power-up windows
 let shieldUntil = 0;
 let iframesUntil = 0;
 let glideUntil = 0;
@@ -144,11 +145,11 @@ let cosmetics = {
   cape: "#d10000",
   mask: "#111111",
   trail: "none",
-  body: "classic",
+  body: "classic",  // includes bee/skeleton
   head: "classic",
 };
 
-let unlocks = { spark: false, neon: false };
+let unlocks = { spark: false, neon: false, smoke: false, confetti: false };
 let coins = 0;
 
 // ----------------------------
@@ -185,8 +186,14 @@ function loadAll() {
   unlocks = { ...unlocks, ...loadJSON(LS.unlocks, unlocks) };
   coins = Math.max(0, Number(localStorage.getItem(LS.coins) || "0"));
 
-  if (cosmetics.trail === "spark" && !unlocks.spark) cosmetics.trail = "none";
-  if (cosmetics.trail === "neon" && !unlocks.neon) cosmetics.trail = "none";
+  // unlock gating
+  const trailNeeds = {
+    spark: "spark",
+    neon: "neon",
+    smoke: "smoke",
+    confetti: "confetti"
+  };
+  if (cosmetics.trail in trailNeeds && !unlocks[trailNeeds[cosmetics.trail]]) cosmetics.trail = "none";
 
   const bgOK = new Set(["city_day", "city_night", "cloudy", "rainy"]);
   if (!bgOK.has(settings.background)) settings.background = "city_day";
@@ -197,7 +204,12 @@ function loadAll() {
   const sfxOK = new Set(["classic", "heroic", "robot"]);
   if (!sfxOK.has(settings.sfxPack)) settings.sfxPack = "classic";
 
-  const partOK = new Set(["classic","armored","speed","animal_cat","animal_dog","animal_fox","helmet","hood"]);
+  const partOK = new Set([
+    "classic","armored","speed",
+    "animal_cat","animal_dog","animal_fox",
+    "bee","skeleton",
+    "helmet","hood"
+  ]);
   if (!partOK.has(cosmetics.body)) cosmetics.body = "classic";
   if (!partOK.has(cosmetics.head)) cosmetics.head = "classic";
 }
@@ -265,7 +277,7 @@ function renderLocalBoard() {
 }
 
 // ----------------------------
-// Canvas helper: rounded rect
+// Rounded rect helper
 // ----------------------------
 function roundedRectPath(ctx2, x, y, w, h, r) {
   const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
@@ -413,8 +425,16 @@ function initStars(arr, w, h) {
 }
 
 // ----------------------------
-// Overlay helpers
+// Overlay helpers (HARD FIX)
 // ----------------------------
+function hideOverlayHard() {
+  // always force hidden + stop stuck state
+  overlay.classList.add("hidden");
+  paused = false;
+  // don’t change gameOver here; just make UI usable
+  pauseButton.textContent = "Pause";
+}
+
 function showOverlay(kind) {
   overlay.classList.remove("hidden");
   if (kind === "paused") {
@@ -427,9 +447,19 @@ function showOverlay(kind) {
     overlayResume.textContent = "Play Again";
   }
 }
-function hideOverlay() {
-  overlay.classList.add("hidden");
-}
+
+// Tap outside overlay card closes it (if paused/gameover)
+overlay.addEventListener("pointerdown", (e) => {
+  if (e.target === overlay) {
+    // if game over, keep overlay (needs button)
+    if (!gameOver) {
+      paused = false;
+      hideOverlayHard();
+      ensureMusicState();
+      toastMsg("Resumed");
+    }
+  }
+}, { passive: true });
 
 // ----------------------------
 // Game lifecycle
@@ -453,11 +483,14 @@ function initGame() {
   scoreText.textContent = "0";
   bestText.textContent = String(best);
   pauseButton.textContent = "Pause";
+
+  // critical: overlay must start hidden
+  hideOverlayHard();
 }
 
 function reset() {
   initGame();
-  hideOverlay();
+  toastMsg("Reset");
 }
 
 function startPlay() {
@@ -472,6 +505,7 @@ function startPlay() {
   paused = false;
   gameOver = false;
 
+  hideOverlayHard();
   ensureAudio();
   playSfx("flap");
   ensureMusicState();
@@ -488,7 +522,7 @@ function togglePause() {
     showOverlay("paused");
     toastMsg("Paused");
   } else {
-    hideOverlay();
+    hideOverlayHard();
     toastMsg("Go!");
     ensureMusicState();
   }
@@ -521,7 +555,7 @@ function endGame() {
 }
 
 // ----------------------------
-// Power-ups (player-friendly)
+// Power-ups (Shield + Glide)
 // ----------------------------
 function spawnBuildingPair() {
   const margin = 70;
@@ -540,18 +574,16 @@ function spawnBuildingPair() {
 }
 
 function buildingSpeed() {
-  // Keep it fair: don’t let speed scale too hard
-  let s = BUILDING_SPEED_BASE * speedMult;
-  return s;
+  return BUILDING_SPEED_BASE * speedMult;
 }
 
 function effectiveGravity() {
-  if (now() < glideUntil) return BASE_GRAVITY * 0.35; // easier
+  if (now() < glideUntil) return BASE_GRAVITY * 0.35;
   return BASE_GRAVITY;
 }
 
 function effectiveLift() {
-  if (now() < glideUntil) return BASE_LIFT * 1.12; // a bit stronger flap
+  if (now() < glideUntil) return BASE_LIFT * 1.12;
   return BASE_LIFT;
 }
 
@@ -579,7 +611,7 @@ function heroHitBuilding(gapTop, gapBottom, bX, bRight) {
 }
 
 // ----------------------------
-// Background renderer
+// Background renderer (same as before)
 // ----------------------------
 function drawClouds(ctx2, f, w, h, strength=1) {
   ctx2.globalAlpha = 0.18 * strength;
@@ -684,7 +716,7 @@ function drawBackground(ctx2, f, w, h, bg, starArr, rainArr) {
 }
 
 // ----------------------------
-// Buildings
+// Buildings + powerup visuals
 // ----------------------------
 function drawBuilding(x, y, width, height) {
   ctx.fillStyle = "#7a0a0a";
@@ -730,11 +762,9 @@ function drawPowerup(p) {
   ctx.save();
   ctx.translate(p.x, p.y);
 
-  if (p.type === "shield") {
-    ctx.fillStyle = "rgba(0, 170, 255, 0.92)";
-  } else {
-    ctx.fillStyle = "rgba(255, 230, 90, 0.92)"; // Glide: warm yellow
-  }
+  ctx.fillStyle = (p.type === "shield")
+    ? "rgba(0, 170, 255, 0.92)"
+    : "rgba(255, 230, 90, 0.92)"; // Glide
 
   ctx.beginPath();
   ctx.arc(0, 0, POWERUP_SIZE, 0, Math.PI*2);
@@ -745,11 +775,12 @@ function drawPowerup(p) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(p.type === "shield" ? "S" : "G", 0, 1);
+
   ctx.restore();
 }
 
 // ----------------------------
-// Hero (animals now look distinct)
+// Hero visuals
 // ----------------------------
 function drawTrail(ctx2, f, hx, hy, trail) {
   if (trail === "none") return;
@@ -766,6 +797,7 @@ function drawTrail(ctx2, f, hx, hy, trail) {
       ctx2.fill();
     }
     ctx2.globalAlpha = 1;
+    return;
   }
 
   if (trail === "neon") {
@@ -779,6 +811,31 @@ function drawTrail(ctx2, f, hx, hy, trail) {
       ctx2.stroke();
     }
     ctx2.globalAlpha = 1;
+    return;
+  }
+
+  if (trail === "smoke") {
+    ctx2.globalAlpha = 0.45;
+    for (let i = 0; i < 5; i++) {
+      ctx2.fillStyle = `rgba(40, 40, 40, ${0.20 + i * 0.06})`;
+      ctx2.beginPath();
+      ctx2.arc(x - i * 10, y + Math.sin((f + i) * 0.5) * 4, 6 - i * 0.8, 0, Math.PI*2);
+      ctx2.fill();
+    }
+    ctx2.globalAlpha = 1;
+    return;
+  }
+
+  if (trail === "confetti") {
+    ctx2.globalAlpha = 0.75;
+    for (let i = 0; i < 10; i++) {
+      const ox = x - (i * 6) - (f % 6);
+      const oy = y + Math.sin((f + i) * 0.9) * 6;
+      ctx2.fillStyle = `hsl(${(f * 6 + i * 36) % 360} 90% 60%)`;
+      ctx2.fillRect(ox, oy, 3, 3);
+    }
+    ctx2.globalAlpha = 1;
+    return;
   }
 }
 
@@ -789,39 +846,47 @@ function drawAnimalHead(ctx2, hx, hy, kind, furColor, accentColor) {
   ctx2.arc(hx + 17, hy + 8, 10, 0, Math.PI*2);
   ctx2.fill();
 
-  // ears + face shape differences
   if (kind === "animal_cat") {
-    // pointy ears
+    // sharper ears + whiskers (cat)
     ctx2.beginPath();
     ctx2.moveTo(hx + 10, hy + 2);
-    ctx2.lineTo(hx + 6, hy - 8);
+    ctx2.lineTo(hx + 6, hy - 9);
     ctx2.lineTo(hx + 14, hy - 2);
     ctx2.closePath();
     ctx2.fill();
 
     ctx2.beginPath();
     ctx2.moveTo(hx + 24, hy + 2);
-    ctx2.lineTo(hx + 28, hy - 8);
+    ctx2.lineTo(hx + 28, hy - 9);
     ctx2.lineTo(hx + 20, hy - 2);
     ctx2.closePath();
     ctx2.fill();
 
-    // whiskers
-    ctx2.globalAlpha = 0.35;
+    // cat whiskers
+    ctx2.globalAlpha = 0.40;
     ctx2.strokeStyle = "#000";
     ctx2.lineWidth = 1;
     for (let i = -1; i <= 1; i++) {
       ctx2.beginPath();
-      ctx2.moveTo(hx + 8, hy + 12 + i * 2);
+      ctx2.moveTo(hx + 9, hy + 13 + i * 2);
       ctx2.lineTo(hx + 2, hy + 12 + i * 2);
       ctx2.stroke();
 
       ctx2.beginPath();
-      ctx2.moveTo(hx + 26, hy + 12 + i * 2);
+      ctx2.moveTo(hx + 25, hy + 13 + i * 2);
       ctx2.lineTo(hx + 32, hy + 12 + i * 2);
       ctx2.stroke();
     }
     ctx2.globalAlpha = 1;
+
+    // small triangular nose (cat)
+    ctx2.fillStyle = accentColor;
+    ctx2.beginPath();
+    ctx2.moveTo(hx + 17, hy + 14);
+    ctx2.lineTo(hx + 14.5, hy + 11.5);
+    ctx2.lineTo(hx + 19.5, hy + 11.5);
+    ctx2.closePath();
+    ctx2.fill();
   }
 
   if (kind === "animal_dog") {
@@ -840,44 +905,79 @@ function drawAnimalHead(ctx2, hx, hy, kind, furColor, accentColor) {
     ctx2.beginPath();
     ctx2.ellipse(hx + 17, hy + 13, 8.5, 6, 0, 0, Math.PI*2);
     ctx2.fill();
+
+    ctx2.fillStyle = accentColor;
+    ctx2.beginPath();
+    ctx2.arc(hx + 17, hy + 13, 2.2, 0, Math.PI*2);
+    ctx2.fill();
   }
 
   if (kind === "animal_fox") {
-    // fox ears + orange cheeks marking
+    // fox: tall ears + white cheeks + longer snout
     ctx2.beginPath();
     ctx2.moveTo(hx + 10, hy + 2);
-    ctx2.lineTo(hx + 5, hy - 9);
-    ctx2.lineTo(hx + 15, hy - 1);
+    ctx2.lineTo(hx + 4, hy - 12);
+    ctx2.lineTo(hx + 16, hy - 1);
     ctx2.closePath();
     ctx2.fill();
 
     ctx2.beginPath();
     ctx2.moveTo(hx + 24, hy + 2);
-    ctx2.lineTo(hx + 29, hy - 9);
-    ctx2.lineTo(hx + 19, hy - 1);
+    ctx2.lineTo(hx + 30, hy - 12);
+    ctx2.lineTo(hx + 18, hy - 1);
     ctx2.closePath();
     ctx2.fill();
 
-    ctx2.globalAlpha = 0.35;
+    // white cheeks (fox)
+    ctx2.globalAlpha = 0.45;
     ctx2.fillStyle = "#fff";
     ctx2.beginPath();
-    ctx2.arc(hx + 10, hy + 12, 4, 0, Math.PI*2);
-    ctx2.arc(hx + 24, hy + 12, 4, 0, Math.PI*2);
+    ctx2.arc(hx + 10, hy + 13, 4.5, 0, Math.PI*2);
+    ctx2.arc(hx + 24, hy + 13, 4.5, 0, Math.PI*2);
     ctx2.fill();
     ctx2.globalAlpha = 1;
 
-    // slightly pointier snout
+    // longer snout
     ctx2.fillStyle = "rgba(255,255,255,0.55)";
     ctx2.beginPath();
-    ctx2.ellipse(hx + 17, hy + 13, 7.5, 5.2, 0, 0, Math.PI*2);
+    ctx2.ellipse(hx + 18, hy + 14, 8.5, 5.2, 0.2, 0, Math.PI*2);
+    ctx2.fill();
+
+    ctx2.fillStyle = accentColor;
+    ctx2.beginPath();
+    ctx2.arc(hx + 21, hy + 14, 2.0, 0, Math.PI*2);
     ctx2.fill();
   }
 
-  // nose
-  ctx2.fillStyle = accentColor;
+  // eyes (common)
+  ctx2.fillStyle = "#fff";
+  ctx2.fillRect(hx + 11, hy + 7, 5, 2);
+  ctx2.fillRect(hx + 20, hy + 7, 5, 2);
+}
+
+function drawBeeHead(ctx2, hx, hy) {
+  // bee head is yellow with black stripe + antennae
+  ctx2.fillStyle = "#ffd400";
   ctx2.beginPath();
-  ctx2.arc(hx + 17, hy + 13, 2.2, 0, Math.PI*2);
+  ctx2.arc(hx + 17, hy + 8, 10, 0, Math.PI*2);
   ctx2.fill();
+
+  ctx2.globalAlpha = 0.25;
+  ctx2.fillStyle = "#000";
+  ctx2.fillRect(hx + 9, hy + 6, 16, 3);
+  ctx2.globalAlpha = 1;
+
+  // antennae
+  ctx2.strokeStyle = "#000";
+  ctx2.lineWidth = 2;
+  ctx2.beginPath();
+  ctx2.moveTo(hx + 14, hy - 1);
+  ctx2.lineTo(hx + 10, hy - 8);
+  ctx2.stroke();
+  ctx2.beginPath();
+  ctx2.moveTo(hx + 20, hy - 1);
+  ctx2.lineTo(hx + 24, hy - 8);
+  ctx2.stroke();
 
   // eyes
   ctx2.fillStyle = "#fff";
@@ -885,10 +985,30 @@ function drawAnimalHead(ctx2, hx, hy, kind, furColor, accentColor) {
   ctx2.fillRect(hx + 20, hy + 7, 5, 2);
 }
 
+function drawSkeletonHead(ctx2, hx, hy) {
+  ctx2.fillStyle = "#f1f1f1";
+  ctx2.beginPath();
+  ctx2.arc(hx + 17, hy + 8, 10, 0, Math.PI*2);
+  ctx2.fill();
+
+  // eyes sockets
+  ctx2.fillStyle = "#111";
+  ctx2.beginPath();
+  ctx2.arc(hx + 13, hy + 8, 2.8, 0, Math.PI*2);
+  ctx2.arc(hx + 21, hy + 8, 2.8, 0, Math.PI*2);
+  ctx2.fill();
+
+  // teeth
+  ctx2.globalAlpha = 0.5;
+  ctx2.fillStyle = "#111";
+  ctx2.fillRect(hx + 11, hy + 14, 12, 2);
+  ctx2.globalAlpha = 1;
+}
+
 function drawHeroVariant(ctx2, f, hx, hy, opts) {
   const { suit, cape, mask, body, head, trail, shielded, iframes } = opts;
 
-  // Shield bubble (or invuln blink)
+  // shield / i-frames
   if (shielded) {
     ctx2.globalAlpha = 0.22;
     ctx2.fillStyle = "#00aaff";
@@ -897,31 +1017,76 @@ function drawHeroVariant(ctx2, f, hx, hy, opts) {
     ctx2.fill();
     ctx2.globalAlpha = 1;
   } else if (iframes) {
-    ctx2.globalAlpha = 0.25 + 0.25 * Math.sin(f * 0.6);
+    ctx2.globalAlpha = 0.35 + 0.25 * Math.sin(f * 0.6);
   }
 
   drawTrail(ctx2, f, hx, hy, trail);
 
-  // Cape
-  const flutter = Math.sin(f * 0.2) * 4;
-  ctx2.fillStyle = cape;
-  ctx2.beginPath();
-  ctx2.moveTo(hx + 6, hy + 18);
-  ctx2.lineTo(hx - 18, hy + 24 + flutter);
-  ctx2.lineTo(hx + 2, hy + 36);
-  ctx2.closePath();
-  ctx2.fill();
+  // Cape (skip for skeleton + bee, looks better without)
+  const capeAllowed = !(body === "skeleton" || body === "bee");
+  if (capeAllowed) {
+    const flutter = Math.sin(f * 0.2) * 4;
+    ctx2.fillStyle = cape;
+    ctx2.beginPath();
+    ctx2.moveTo(hx + 6, hy + 18);
+    ctx2.lineTo(hx - 18, hy + 24 + flutter);
+    ctx2.lineTo(hx + 2, hy + 36);
+    ctx2.closePath();
+    ctx2.fill();
+  }
 
   // BODY
-  if (body.startsWith("animal_")) {
-    // different body silhouettes per animal
+  if (body === "bee") {
+    // bee body with stripes + wings
+    ctx2.fillStyle = "#ffd400";
+    ctx2.beginPath();
+    ctx2.ellipse(hx + 17, hy + 22, 16, 12, 0, 0, Math.PI*2);
+    ctx2.fill();
+
+    ctx2.globalAlpha = 0.35;
+    ctx2.fillStyle = "#000";
+    ctx2.fillRect(hx + 6, hy + 18, 22, 3);
+    ctx2.fillRect(hx + 6, hy + 23, 22, 3);
+    ctx2.fillRect(hx + 6, hy + 28, 22, 3);
+    ctx2.globalAlpha = 1;
+
+    // wings
+    ctx2.globalAlpha = 0.35;
+    ctx2.fillStyle = "#b9f2ff";
+    ctx2.beginPath();
+    ctx2.ellipse(hx + 12, hy + 16, 8, 6, -0.3, 0, Math.PI*2);
+    ctx2.ellipse(hx + 22, hy + 16, 8, 6, 0.3, 0, Math.PI*2);
+    ctx2.fill();
+    ctx2.globalAlpha = 1;
+  } else if (body === "skeleton") {
+    // ribcage box + spine
+    ctx2.fillStyle = "#f1f1f1";
+    roundedRectPath(ctx2, hx + 4, hy + 10, 26, 24, 6);
+    ctx2.fill();
+
+    ctx2.globalAlpha = 0.35;
+    ctx2.strokeStyle = "#111";
+    ctx2.lineWidth = 1;
+    for (let i = 0; i < 4; i++) {
+      ctx2.beginPath();
+      ctx2.moveTo(hx + 7, hy + 14 + i * 5);
+      ctx2.lineTo(hx + 27, hy + 14 + i * 5);
+      ctx2.stroke();
+    }
+    // spine
+    ctx2.beginPath();
+    ctx2.moveTo(hx + 17, hy + 12);
+    ctx2.lineTo(hx + 17, hy + 33);
+    ctx2.stroke();
+    ctx2.globalAlpha = 1;
+  } else if (body.startsWith("animal_")) {
     ctx2.fillStyle = suit;
 
     if (body === "animal_cat") {
       ctx2.beginPath();
       ctx2.ellipse(hx + 17, hy + 22, 15, 11, 0, 0, Math.PI*2);
       ctx2.fill();
-      // cat tail
+      // tail
       ctx2.globalAlpha = 0.7;
       ctx2.beginPath();
       ctx2.ellipse(hx + 2, hy + 23, 6, 3, -0.6, 0, Math.PI*2);
@@ -931,7 +1096,7 @@ function drawHeroVariant(ctx2, f, hx, hy, opts) {
       ctx2.beginPath();
       ctx2.ellipse(hx + 17, hy + 23, 16, 12.5, 0, 0, Math.PI*2);
       ctx2.fill();
-      // dog spot
+      // spot
       ctx2.globalAlpha = 0.25;
       ctx2.fillStyle = "#000";
       ctx2.beginPath();
@@ -939,11 +1104,10 @@ function drawHeroVariant(ctx2, f, hx, hy, opts) {
       ctx2.fill();
       ctx2.globalAlpha = 1;
     } else {
-      // fox
+      // fox body + white tip tail
       ctx2.beginPath();
       ctx2.ellipse(hx + 17, hy + 22, 15.5, 11.5, 0, 0, Math.PI*2);
       ctx2.fill();
-      // fox tail tip
       ctx2.globalAlpha = 0.7;
       ctx2.fillStyle = "rgba(255,255,255,0.7)";
       ctx2.beginPath();
@@ -952,7 +1116,7 @@ function drawHeroVariant(ctx2, f, hx, hy, opts) {
       ctx2.globalAlpha = 1;
     }
 
-    // tiny paws
+    // paws
     ctx2.globalAlpha = 0.25;
     ctx2.fillStyle = "#000";
     ctx2.beginPath();
@@ -986,7 +1150,11 @@ function drawHeroVariant(ctx2, f, hx, hy, opts) {
   }
 
   // HEAD
-  if (head.startsWith("animal_")) {
+  if (head === "bee") {
+    drawBeeHead(ctx2, hx, hy);
+  } else if (head === "skeleton") {
+    drawSkeletonHead(ctx2, hx, hy);
+  } else if (head.startsWith("animal_")) {
     drawAnimalHead(ctx2, hx, hy, head, suit, mask);
   } else if (head === "helmet") {
     ctx2.fillStyle = "#c7c7c7";
@@ -1046,7 +1214,7 @@ function drawHero() {
     head: cosmetics.head,
     trail: cosmetics.trail,
     shielded: now() < shieldUntil,
-    iframes: now() < iframesUntil
+    iframes: now() < iframesUntil,
   });
 }
 
@@ -1054,6 +1222,11 @@ function drawHero() {
 // Update + draw loop
 // ----------------------------
 function update() {
+  // if overlay somehow visible while not paused/gameOver, force hide (extra safety)
+  if (!paused && !gameOver && !overlay.classList.contains("hidden")) {
+    hideOverlayHard();
+  }
+
   if (!started || gameOver || paused) return;
 
   hero.vy += effectiveGravity();
@@ -1087,15 +1260,13 @@ function update() {
     // collision
     const hit = heroHitBuilding(gapTop, gapBottom, b.x, right);
     if (hit) {
-      // If we’re in invulnerability frames, ignore collision
       if (now() < iframesUntil) {
         // ignore
       } else if (now() < shieldUntil) {
-        // Shield breaks and saves you (prevents instant re-hit)
         shieldUntil = 0;
         iframesUntil = now() + SHIELD_IFRAME_MS;
 
-        // Push hero slightly left/up so you’re not still overlapping
+        // nudge out of collision
         hero.vy = Math.min(hero.vy, 0);
         hero.y = Math.max(0, hero.y - 18);
 
@@ -1138,14 +1309,15 @@ function draw() {
 
   drawHero();
 
-  // Small status text
+  // small status text
   ctx.globalAlpha = 0.9;
   ctx.fillStyle = "rgba(0,0,0,0.6)";
   ctx.font = "12px Arial";
-  const shieldOn = now() < shieldUntil ? "Shield" : "";
-  const glideOn = now() < glideUntil ? "Glide" : "";
-  const ifr = now() < iframesUntil ? "Safe" : "";
-  const buffs = [shieldOn, glideOn, ifr].filter(Boolean).join(" • ");
+  const buffs = [
+    now() < shieldUntil ? "Shield" : "",
+    now() < glideUntil ? "Glide" : "",
+    now() < iframesUntil ? "Safe" : ""
+  ].filter(Boolean).join(" • ");
   if (buffs) ctx.fillText(buffs, 12, 18);
   ctx.globalAlpha = 1;
 
@@ -1209,6 +1381,14 @@ canvas.addEventListener("pointerdown", (e) => {
   e.preventDefault();
   ensureAudio();
 
+  // if overlay stuck for any reason, a canvas tap clears it if not gameover
+  if (!overlay.classList.contains("hidden") && !gameOver) {
+    paused = false;
+    hideOverlayHard();
+    ensureMusicState();
+    return;
+  }
+
   if (gameOver) {
     reset();
     startPlay();
@@ -1222,6 +1402,16 @@ canvas.addEventListener("pointerdown", (e) => {
 }, { passive: false });
 
 document.addEventListener("keydown", (e) => {
+  if (e.code === "Escape") {
+    // ESC always clears overlay if not gameover
+    if (!overlay.classList.contains("hidden") && !gameOver) {
+      paused = false;
+      hideOverlayHard();
+      ensureMusicState();
+    }
+    return;
+  }
+
   if (e.code !== "Space") return;
   e.preventDefault();
   ensureAudio();
@@ -1241,7 +1431,7 @@ document.addEventListener("keydown", (e) => {
 // ----------------------------
 // UI wiring
 // ----------------------------
-resetButton.addEventListener("click", () => { reset(); toastMsg("Reset"); });
+resetButton.addEventListener("click", () => reset());
 pauseButton.addEventListener("click", () => togglePause());
 
 playButton.addEventListener("click", () => startPlay());
@@ -1268,7 +1458,7 @@ overlayHome.addEventListener("click", () => {
   paused = false;
   gameOver = false;
   started = false;
-  hideOverlay();
+  hideOverlayHard();
   stopMusicPreview();
   stopMusic();
   menu.classList.remove("hidden");
@@ -1277,7 +1467,7 @@ overlayHome.addEventListener("click", () => {
 });
 overlaySettings.addEventListener("click", () => {
   paused = false;
-  hideOverlay();
+  hideOverlayHard();
   stopMusicPreview();
   stopMusic();
   menu.classList.remove("hidden");
@@ -1349,34 +1539,33 @@ maskColor.addEventListener("input", () => { cosmetics.mask = maskColor.value; sa
 
 trailSelect.addEventListener("change", () => {
   const v = trailSelect.value;
-  if (v === "spark" && !unlocks.spark) { toastMsg("Spark is locked. Buy it in Shop."); trailSelect.value = "none"; return; }
-  if (v === "neon" && !unlocks.neon) { toastMsg("Neon is locked. Buy it in Shop."); trailSelect.value = "none"; return; }
+  if (v !== "none" && !unlocks[v]) {
+    toastMsg("That trail is locked. Buy it in Shop.");
+    trailSelect.value = "none";
+    return;
+  }
   cosmetics.trail = v;
   saveAll();
+  toastMsg("Trail updated");
 });
 
 // Shop
-buySpark.addEventListener("click", () => {
-  if (unlocks.spark) return toastMsg("Spark already unlocked.");
-  if (coins < 50) return toastMsg("Need 50 coins.");
-  coins -= 50;
-  unlocks.spark = true;
+function buy(item, cost) {
+  if (unlocks[item]) return toastMsg("Already unlocked.");
+  if (coins < cost) return toastMsg(`Need ${cost} coins.`);
+  coins -= cost;
+  unlocks[item] = true;
   coinsText.textContent = String(coins);
   saveAll();
-  toastMsg("Spark unlocked!");
-});
-buyNeon.addEventListener("click", () => {
-  if (unlocks.neon) return toastMsg("Neon already unlocked.");
-  if (coins < 120) return toastMsg("Need 120 coins.");
-  coins -= 120;
-  unlocks.neon = true;
-  coinsText.textContent = String(coins);
-  saveAll();
-  toastMsg("Neon unlocked!");
-});
+  toastMsg("Unlocked!");
+}
+buySpark.addEventListener("click", () => buy("spark", 50));
+buyNeon.addEventListener("click", () => buy("neon", 120));
+buySmoke.addEventListener("click", () => buy("smoke", 80));
+buyConfetti.addEventListener("click", () => buy("confetti", 160));
 
 // ----------------------------
-// Splash boot animation
+// Splash
 // ----------------------------
 function runSplash() {
   if (!splash || !splashFill) return;
@@ -1395,24 +1584,23 @@ function runSplash() {
 // Boot
 // ----------------------------
 (function boot() {
-  // version label
   if (versionText) versionText.textContent = APP_VERSION;
 
   runSplash();
-
   loadAll();
 
   const name = ensureName();
   playerNameText.textContent = name;
 
+  // particles
   initRain(rainDrops, canvas.width, canvas.height);
   initStars(stars, canvas.width, canvas.height);
-
   if (previewCanvas) {
     initRain(previewRainDrops, previewCanvas.width, previewCanvas.height);
     initStars(previewStars, previewCanvas.width, previewCanvas.height);
   }
 
+  // apply UI settings
   soundToggle.checked = !!settings.soundOn;
   musicToggle.checked = !!settings.musicOn;
   bgSelect.value = settings.background;
@@ -1425,6 +1613,9 @@ function runSplash() {
   suitColor.value = cosmetics.suit;
   capeColor.value = cosmetics.cape;
   maskColor.value = cosmetics.mask;
+
+  // lock-safe default
+  if (cosmetics.trail !== "none" && !unlocks[cosmetics.trail]) cosmetics.trail = "none";
   trailSelect.value = cosmetics.trail;
 
   coinsText.textContent = String(coins);
@@ -1434,7 +1625,6 @@ function runSplash() {
   settingsPanel.classList.add("hidden");
   menu.classList.remove("hidden");
 
-  hideOverlay();
   initGame();
   loop();
 })();

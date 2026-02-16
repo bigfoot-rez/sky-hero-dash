@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#0b1220" />
   <title>Sky Hero Dash</title>
-  <link rel="stylesheet" href="style.css?v=13" />
+  <link rel="stylesheet" href="style.css?v=14" />
 </head>
 <body>
   <!-- Splash -->
@@ -29,7 +29,7 @@
 
     <canvas id="gameCanvas" width="400" height="600"></canvas>
 
-    <!-- PAUSE / GAMEOVER OVERLAY -->
+    <!-- PAUSE / GAMEOVER OVERLAY (starts hidden always) -->
     <div id="overlay" class="overlay hidden">
       <div class="overlayCard">
         <div id="overlayTitle" class="overlayTitle">Paused</div>
@@ -39,7 +39,7 @@
           <button id="overlayHome" class="btn big secondary">Home</button>
           <button id="overlaySettings" class="btn big secondary">Settings</button>
         </div>
-        <div class="hint" style="text-align:center;">Home keeps your settings + unlocks.</div>
+        <div class="hint" style="text-align:center;">Tip: Tap outside this box to close.</div>
       </div>
     </div>
 
@@ -48,7 +48,7 @@
       <div class="menuCard">
         <div class="title">Sky Hero Dash</div>
         <div class="subtitle">Customize your hero, pick the vibe, then fly.</div>
-        <div class="versionText" id="versionText">v13</div>
+        <div class="versionText" id="versionText">v14</div>
 
         <div class="menuRow">
           <button id="playButton" class="btn big">Play</button>
@@ -136,7 +136,7 @@
             <div class="field" style="grid-column: 1 / -1;">
               <div class="label">Hero Preview</div>
               <canvas id="heroPreviewCanvas" width="320" height="160"></canvas>
-              <div class="hint">Animals now look different (ears/snouts/markings).</div>
+              <div class="hint">Cat/Fox/Bee/Skeleton now look unique.</div>
             </div>
 
             <div class="field">
@@ -148,6 +148,8 @@
                 <option value="animal_cat">Animal: Cat</option>
                 <option value="animal_dog">Animal: Dog</option>
                 <option value="animal_fox">Animal: Fox</option>
+                <option value="bee">Bee</option>
+                <option value="skeleton">Skeleton</option>
               </select>
             </div>
 
@@ -160,6 +162,8 @@
                 <option value="animal_cat">Animal: Cat</option>
                 <option value="animal_dog">Animal: Dog</option>
                 <option value="animal_fox">Animal: Fox</option>
+                <option value="bee">Bee</option>
+                <option value="skeleton">Skeleton</option>
               </select>
             </div>
 
@@ -184,6 +188,8 @@
                 <option value="none">None</option>
                 <option value="spark">Spark (unlock)</option>
                 <option value="neon">Neon (unlock)</option>
+                <option value="smoke">Smoke (unlock)</option>
+                <option value="confetti">Confetti (unlock)</option>
               </select>
             </div>
           </div>
@@ -198,6 +204,8 @@
             <div class="shopList">
               <button id="buySpark" class="btn small">Buy Spark Trail (50)</button>
               <button id="buyNeon" class="btn small">Buy Neon Trail (120)</button>
+              <button id="buySmoke" class="btn small">Buy Smoke Trail (80)</button>
+              <button id="buyConfetti" class="btn small">Buy Confetti Trail (160)</button>
             </div>
             <div class="hint">Coins: pass buildings (+1), grab power-ups (+5), end-of-run bonus.</div>
           </div>
@@ -219,16 +227,12 @@
     <div id="toast" class="toast hidden"></div>
   </div>
 
-  <!-- Analytics (OPTIONAL): GoatCounter
-       1) Create an account + site on GoatCounter
-       2) Replace YOUR-SITE-CODE below with your code (example: bigfootrez)
-       Docs: https://goatcounter.com/help/js
-  -->
+  <!-- Analytics (optional): GoatCounter placeholder -->
   <script
     data-goatcounter="https://YOUR-SITE-CODE.goatcounter.com/count"
     async
     src="//gc.zgo.at/count.js"></script>
 
-  <script src="game.js?v=13"></script>
+  <script src="game.js?v=14"></script>
 </body>
 </html>
