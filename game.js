@@ -1,3 +1,8 @@
+// ============================
+// SKY HERO DASH (Local LB only)
+// v7 (cache-bust handled in index.html)
+// ============================
+
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
@@ -5,124 +10,242 @@ const ctx = canvas.getContext("2d");
 const scoreText = document.getElementById("scoreText");
 const bestText = document.getElementById("bestText");
 const playerNameText = document.getElementById("playerName");
-const leaderboardEl = document.getElementById("leaderboard");
-
 const resetButton = document.getElementById("resetButton");
-const nameButton = document.getElementById("nameButton");
-const overlay = document.getElementById("overlay");
-const overlayTitle = document.getElementById("overlayTitle");
-const startButton = document.getElementById("startButton");
+const pauseButton = document.getElementById("pauseButton");
 
-// LocalStorage keys (per device)
-const LS_NAME_KEY = "skyhero_player_name_v1";
-const LS_BOARD_KEY = "skyhero_leaderboard_v1";
-const LS_BEST_KEY = "skyhero_best_v1";
+// Menu/UI
+const menu = document.getElementById("menu");
+const playButton = document.getElementById("playButton");
+const settingsButton = document.getElementById("settingsButton");
+const closeSettings = document.getElementById("closeSettings");
+const settingsPanel = document.getElementById("settingsPanel");
+const shopButton = document.getElementById("shopButton");
+const shopPanel = document.getElementById("shopPanel");
+const changeNameButton = document.getElementById("changeNameButton");
 
-// Game state
-let hero, buildings, score, best, gameOver, started;
-let animationId;
-let frame = 0;
+const soundToggle = document.getElementById("soundToggle");
+const suitColor = document.getElementById("suitColor");
+const capeColor = document.getElementById("capeColor");
+const maskColor = document.getElementById("maskColor");
+const trailSelect = document.getElementById("trailSelect");
 
+const coinsText = document.getElementById("coinsText");
+const buySpark = document.getElementById("buySpark");
+const buyNeon = document.getElementById("buyNeon");
+
+const localLeaderboardEl = document.getElementById("localLeaderboard");
+const toast = document.getElementById("toast");
+
+// ----------------------------
+// LocalStorage keys
+// ----------------------------
+const LS = {
+  name: "skyhero_name_v1",
+  best: "skyhero_best_v1",
+  coins: "skyhero_coins_v1",
+  unlocks: "skyhero_unlocks_v1",
+  settings: "skyhero_settings_v1",
+  cosmetics: "skyhero_cosmetics_v1",
+  localBoard: "skyhero_localboard_v1",
+};
+
+// ----------------------------
 // Tuning
+// ----------------------------
 const GRAVITY = 0.55;
 const LIFT = -10.0;
-const BUILDING_SPEED = 2.6;
+
+const BUILDING_SPEED_BASE = 2.6;
 const BUILDING_WIDTH = 64;
 const GAP_SIZE = 170;
-const SPAWN_EVERY_FRAMES = 90; // ~1.5s at 60fps
+const SPAWN_EVERY_FRAMES = 90;
 
-function getPlayerName() {
-  return localStorage.getItem(LS_NAME_KEY) || "";
+const POWERUP_CHANCE = 0.22;
+const POWERUP_SIZE = 18;
+
+const SHIELD_DURATION_MS = 5500;
+const SLOWMO_DURATION_MS = 4500;
+
+// ----------------------------
+// State
+// ----------------------------
+let hero, buildings, score, best, gameOver, started, paused;
+let animationId = null;
+let frame = 0;
+
+let speedMult = 1;
+let shieldUntil = 0;
+let slowmoUntil = 0;
+
+// Settings + cosmetics + unlocks
+let settings = { soundOn: true };
+let cosmetics = { suit: "#1f4bff", cape: "#d10000", mask: "#111111", trail: "none" };
+let unlocks = { spark: false, neon: false };
+let coins = 0;
+
+// ----------------------------
+// Helpers
+// ----------------------------
+function now() { return Date.now(); }
+
+function toastMsg(msg) {
+  toast.textContent = msg;
+  toast.classList.remove("hidden");
+  setTimeout(() => toast.classList.add("hidden"), 1400);
 }
 
-function setPlayerName(name) {
-  const cleaned = (name || "").trim().slice(0, 16);
-  if (!cleaned) return false;
-  localStorage.setItem(LS_NAME_KEY, cleaned);
-  playerNameText.textContent = cleaned;
+function loadJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch { return fallback; }
+}
+function saveJSON(key, obj) {
+  localStorage.setItem(key, JSON.stringify(obj));
+}
+
+function saveAll() {
+  saveJSON(LS.settings, settings);
+  saveJSON(LS.cosmetics, cosmetics);
+  saveJSON(LS.unlocks, unlocks);
+  localStorage.setItem(LS.coins, String(coins));
+}
+
+function loadAll() {
+  settings = { ...settings, ...loadJSON(LS.settings, settings) };
+  cosmetics = { ...cosmetics, ...loadJSON(LS.cosmetics, cosmetics) };
+  unlocks = { ...unlocks, ...loadJSON(LS.unlocks, unlocks) };
+  coins = Math.max(0, Number(localStorage.getItem(LS.coins) || "0"));
+
+  // enforce unlock rules
+  if (cosmetics.trail === "spark" && !unlocks.spark) cosmetics.trail = "none";
+  if (cosmetics.trail === "neon" && !unlocks.neon) cosmetics.trail = "none";
+}
+
+function getName() {
+  return localStorage.getItem(LS.name) || "";
+}
+function setName(n) {
+  const name = (n || "").trim().slice(0, 16);
+  if (!name) return false;
+  localStorage.setItem(LS.name, name);
+  playerNameText.textContent = name;
   return true;
 }
-
-function promptForName() {
-  const current = getPlayerName();
-  const name = prompt("Pick a nickname (max 16 chars):", current || "");
-  if (name === null) return; // cancelled
-  if (!setPlayerName(name)) alert("Nickname can’t be empty.");
-  renderLeaderboard();
+function promptName() {
+  const current = getName();
+  const entered = prompt("Pick a nickname (max 16 chars):", current || "");
+  if (entered === null) return;
+  if (!setName(entered)) {
+    alert("Nickname can’t be empty.");
+    return;
+  }
+  renderLocalBoard();
+}
+function ensureName() {
+  const existing = getName();
+  if (existing) return existing;
+  const entered = prompt("Pick a nickname (max 16 chars):", "") || "";
+  if (!setName(entered)) setName("Player");
+  return getName();
 }
 
-function loadLeaderboard() {
+// ----------------------------
+// Local leaderboard (Top 5)
+// ----------------------------
+function loadLocalBoard() {
   try {
-    const raw = localStorage.getItem(LS_BOARD_KEY);
+    const raw = localStorage.getItem(LS.localBoard);
     const parsed = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter(x => x && typeof x.name === "string" && typeof x.score === "number")
       .map(x => ({ name: x.name.slice(0, 16), score: Math.max(0, Math.floor(x.score)) }));
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
-
-function saveLeaderboard(entries) {
-  localStorage.setItem(LS_BOARD_KEY, JSON.stringify(entries));
+function saveLocalBoard(board) {
+  localStorage.setItem(LS.localBoard, JSON.stringify(board));
 }
-
-function submitScore(scoreValue) {
-  const name = getPlayerName() || "Player";
-  let board = loadLeaderboard();
-  board.push({ name, score: scoreValue });
+function submitLocalScore(name, s) {
+  let board = loadLocalBoard();
+  board.push({ name, score: s });
   board.sort((a, b) => b.score - a.score);
   board = board.slice(0, 5);
-  saveLeaderboard(board);
-  renderLeaderboard();
+  saveLocalBoard(board);
+  renderLocalBoard();
 }
-
-function renderLeaderboard() {
-  const board = loadLeaderboard().slice(0, 5);
-  leaderboardEl.innerHTML = "";
+function renderLocalBoard() {
+  const board = loadLocalBoard().slice(0, 5);
+  localLeaderboardEl.innerHTML = "";
   if (board.length === 0) {
     const li = document.createElement("li");
-    li.textContent = "No scores yet — be the first!";
-    leaderboardEl.appendChild(li);
+    li.textContent = "No scores yet.";
+    localLeaderboardEl.appendChild(li);
     return;
   }
-  for (const entry of board) {
+  for (const e of board) {
     const li = document.createElement("li");
-    li.textContent = `${entry.name}: ${entry.score}`;
-    leaderboardEl.appendChild(li);
+    li.textContent = `${e.name}: ${e.score}`;
+    localLeaderboardEl.appendChild(li);
   }
 }
 
-function showOverlay(title) {
-  overlayTitle.textContent = title;
-  overlay.classList.remove("hidden");
+// ----------------------------
+// Sound (no files; tones)
+// ----------------------------
+let audioCtx = null;
+
+function audioOn() { return !!settings.soundOn; }
+
+function ensureAudio() {
+  if (!audioOn()) return;
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
 }
 
-function hideOverlay() {
-  overlay.classList.add("hidden");
+function beep(freq, durationMs, type = "sine", gainVal = 0.06) {
+  if (!audioOn()) return;
+  ensureAudio();
+  if (!audioCtx) return;
+
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type;
+  o.frequency.value = freq;
+  g.gain.value = gainVal;
+
+  o.connect(g);
+  g.connect(audioCtx.destination);
+
+  o.start();
+  o.stop(audioCtx.currentTime + durationMs / 1000);
 }
 
+function sfxFlap() { beep(420, 60, "square", 0.05); }
+function sfxScore() { beep(620, 70, "sine", 0.06); }
+function sfxPower() { beep(840, 110, "triangle", 0.06); }
+function sfxCrash() { beep(160, 180, "sawtooth", 0.05); }
+
+// ----------------------------
+// Game lifecycle
+// ----------------------------
 function initGame() {
-  hero = {
-    x: 80,
-    y: canvas.height * 0.5,
-    w: 34,
-    h: 34,
-    vy: 0
-  };
-
+  hero = { x: 80, y: canvas.height * 0.5, w: 34, h: 34, vy: 0 };
   buildings = [];
   score = 0;
-  best = Math.max(0, Number(localStorage.getItem(LS_BEST_KEY) || "0"));
+  best = Math.max(0, Number(localStorage.getItem(LS.best) || "0"));
   gameOver = false;
   started = false;
+  paused = false;
   frame = 0;
+
+  speedMult = 1;
+  shieldUntil = 0;
+  slowmoUntil = 0;
 
   scoreText.textContent = "0";
   bestText.textContent = String(best);
-
-  showOverlay("Tap to start");
+  pauseButton.textContent = "Pause";
 }
 
 function reset() {
@@ -131,123 +254,137 @@ function reset() {
   animationId = requestAnimationFrame(loop);
 }
 
-function flap() {
-  if (gameOver) return;
-
-  if (!started) {
-    started = true;
-    hideOverlay();
-  }
-  hero.vy = LIFT;
+function startPlay() {
+  menu.classList.add("hidden");
+  started = true;
+  paused = false;
+  ensureAudio();
+  sfxFlap();
 }
 
+function togglePause() {
+  if (gameOver || !started) return;
+  paused = !paused;
+  pauseButton.textContent = paused ? "Resume" : "Pause";
+  toastMsg(paused ? "Paused" : "Go!");
+}
+
+function endGame() {
+  if (gameOver) return;
+  gameOver = true;
+  paused = false;
+
+  ensureAudio();
+  sfxCrash();
+
+  const name = ensureName();
+
+  if (score > best) {
+    best = score;
+    localStorage.setItem(LS.best, String(best));
+    bestText.textContent = String(best);
+  }
+
+  // coins reward per run
+  coins += Math.min(60, Math.floor(score * 2));
+  coinsText.textContent = String(coins);
+  saveAll();
+
+  submitLocalScore(name, score);
+
+  menu.classList.remove("hidden");
+}
+
+// ----------------------------
+// Buildings + power-ups
+// ----------------------------
 function spawnBuildingPair() {
   const margin = 70;
   const topMin = margin;
   const topMax = canvas.height - margin - GAP_SIZE;
   const top = Math.floor(topMin + Math.random() * (topMax - topMin));
 
-  buildings.push({
-    x: canvas.width + 10,
-    top,
-    passed: false
-  });
-}
-
-function endGame() {
-  if (gameOver) return;
-  gameOver = true;
-
-  if (score > best) {
-    best = score;
-    localStorage.setItem(LS_BEST_KEY, String(best));
-    bestText.textContent = String(best);
+  let power = null;
+  if (Math.random() < POWERUP_CHANCE) {
+    const types = ["shield", "slow"];
+    const t = types[Math.floor(Math.random() * types.length)];
+    power = { type: t, x: canvas.width + 10 + BUILDING_WIDTH / 2, y: top + GAP_SIZE / 2, taken: false };
   }
 
-  submitScore(score);
-  showOverlay("Game Over");
+  buildings.push({ x: canvas.width + 10, top, passed: false, power });
 }
 
-/* ---------- Drawing (upgraded graphics) ---------- */
+function buildingSpeed() {
+  let s = BUILDING_SPEED_BASE;
+  if (now() < slowmoUntil) s *= 0.6;
+  s *= speedMult;
+  return s;
+}
 
+function applyPower(type) {
+  if (type === "shield") {
+    shieldUntil = now() + SHIELD_DURATION_MS;
+    toastMsg("Shield ON!");
+  } else if (type === "slow") {
+    slowmoUntil = now() + SLOWMO_DURATION_MS;
+    toastMsg("Slow-mo!");
+  }
+  ensureAudio();
+  sfxPower();
+
+  coins += 5;
+  coinsText.textContent = String(coins);
+  saveAll();
+}
+
+// collision test
+function heroHitBuilding(gapTop, gapBottom, bX, bRight) {
+  const heroRight = hero.x + hero.w;
+  const heroBottom = hero.y + hero.h;
+  const xOverlap = heroRight > bX && hero.x < bRight;
+  if (!xOverlap) return false;
+  const hitTop = hero.y < gapTop;
+  const hitBottom = heroBottom > gapBottom;
+  return hitTop || hitBottom;
+}
+
+// ----------------------------
+// Drawing: sky + parallax city + buildings + hero
+// ----------------------------
 function drawSky() {
   const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
   sky.addColorStop(0, "#87CEEB");
   sky.addColorStop(1, "#cdeffd");
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
 
-  // subtle clouds
-  ctx.globalAlpha = 0.18;
-  ctx.fillStyle = "#ffffff";
-  for (let i = 0; i < 5; i++) {
-    const cx = (i * 120 + (frame * 0.4)) % (canvas.width + 140) - 70;
-    const cy = 80 + (i % 3) * 40;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 22, 0, Math.PI * 2);
-    ctx.arc(cx + 22, cy + 6, 18, 0, Math.PI * 2);
-    ctx.arc(cx - 22, cy + 8, 16, 0, Math.PI * 2);
-    ctx.fill();
+function drawSkylineLayer(speed, color, baseY, alpha) {
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+
+  const offset = -((frame * speed) % 140);
+  for (let x = offset; x < canvas.width + 140; x += 140) {
+    const w = 90;
+    const h = 80 + ((x + frame) % 70);
+    ctx.fillRect(x, baseY - h, w, h);
   }
+
   ctx.globalAlpha = 1;
 }
 
-function drawHero(x, y) {
-  // shadow
-  ctx.globalAlpha = 0.18;
-  ctx.fillStyle = "#000";
-  ctx.beginPath();
-  ctx.ellipse(x + 18, y + 40, 16, 6, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-
-  // cape (animated a bit using frame)
-  const flutter = Math.sin(frame * 0.2) * 4;
-  ctx.fillStyle = "#d10000";
-  ctx.beginPath();
-  ctx.moveTo(x + 6, y + 16);
-  ctx.lineTo(x - 18, y + 22 + flutter);
-  ctx.lineTo(x + 2, y + 34);
-  ctx.closePath();
-  ctx.fill();
-
-  // body suit
-  ctx.fillStyle = "#1f4bff";
-  ctx.fillRect(x, y + 10, 34, 24);
-
-  // belt
-  ctx.fillStyle = "#ffd400";
-  ctx.fillRect(x + 6, y + 26, 22, 4);
-
-  // head
-  ctx.fillStyle = "#ffcc99";
-  ctx.beginPath();
-  ctx.arc(x + 17, y + 6, 10, 0, Math.PI * 2);
-  ctx.fill();
-
-  // mask
-  ctx.fillStyle = "#111";
-  ctx.fillRect(x + 7, y + 2, 20, 6);
-
-  // eye slits
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(x + 10, y + 4, 6, 2);
-  ctx.fillRect(x + 19, y + 4, 6, 2);
-
-  // emblem
-  ctx.fillStyle = "#fff";
-  ctx.beginPath();
-  ctx.arc(x + 17, y + 20, 4, 0, Math.PI * 2);
-  ctx.fill();
+function drawParallaxCity() {
+  drawSkylineLayer(0.25, "#2b2b4f", 420, 0.80);
+  drawSkylineLayer(0.45, "#3a3a67", 360, 0.70);
+  drawSkylineLayer(0.70, "#4b4b85", 300, 0.60);
 }
 
 function drawBuilding(x, y, width, height) {
-  // base building
   ctx.fillStyle = "#7a0a0a";
   ctx.fillRect(x, y, width, height);
 
-  // darker side shading
-  ctx.globalAlpha = 0.25;
+  // side shading
+  ctx.globalAlpha = 0.22;
   ctx.fillStyle = "#000";
   ctx.fillRect(x + width - 10, y, 10, height);
   ctx.globalAlpha = 1;
@@ -263,7 +400,6 @@ function drawBuilding(x, y, width, height) {
     ctx.stroke();
   }
 
-  // staggered vertical brick seams
   for (let row = 0; row < height; row += 28) {
     const offset = (row / 28) % 2 === 0 ? 0 : 10;
     for (let col = x + offset; col < x + width; col += 20) {
@@ -283,85 +419,205 @@ function drawBuilding(x, y, width, height) {
   }
 }
 
-/* ---------- Game update / draw loop ---------- */
+function drawPowerup(p) {
+  if (!p || p.taken) return;
 
+  ctx.save();
+  ctx.translate(p.x, p.y);
+
+  ctx.fillStyle = p.type === "shield"
+    ? "rgba(0, 170, 255, 0.9)"
+    : "rgba(180, 255, 90, 0.9)";
+
+  ctx.beginPath();
+  ctx.arc(0, 0, POWERUP_SIZE, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#000";
+  ctx.font = "14px Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(p.type === "shield" ? "S" : "⏳", 0, 1);
+
+  ctx.restore();
+}
+
+function drawTrail() {
+  if (cosmetics.trail === "none") return;
+
+  const x = hero.x - 6;
+  const y = hero.y + 18;
+
+  if (cosmetics.trail === "spark") {
+    ctx.globalAlpha = 0.65;
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = `rgba(255, 200, 40, ${0.25 + i * 0.12})`;
+      ctx.beginPath();
+      ctx.arc(x - i * 10, y + Math.sin((frame + i) * 0.6) * 3, 4 - i * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  if (cosmetics.trail === "neon") {
+    ctx.globalAlpha = 0.55;
+    for (let i = 0; i < 5; i++) {
+      ctx.strokeStyle = `rgba(0, 255, 230, ${0.25 + i * 0.1})`;
+      ctx.lineWidth = 3 - i * 0.4;
+      ctx.beginPath();
+      ctx.moveTo(x - i * 10, y);
+      ctx.lineTo(x - i * 10 - 8, y + Math.sin((frame + i) * 0.7) * 6);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawHero() {
+  const x = hero.x;
+  const y = hero.y;
+
+  // shield glow
+  if (now() < shieldUntil) {
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = "#00aaff";
+    ctx.beginPath();
+    ctx.arc(x + 17, y + 17, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  drawTrail();
+
+  // cape flutter
+  const flutter = Math.sin(frame * 0.2) * 4;
+  ctx.fillStyle = cosmetics.cape;
+  ctx.beginPath();
+  ctx.moveTo(x + 6, y + 18);
+  ctx.lineTo(x - 18, y + 24 + flutter);
+  ctx.lineTo(x + 2, y + 36);
+  ctx.closePath();
+  ctx.fill();
+
+  // suit
+  ctx.fillStyle = cosmetics.suit;
+  ctx.fillRect(x, y + 10, 34, 24);
+
+  // belt
+  ctx.fillStyle = "#ffd400";
+  ctx.fillRect(x + 6, y + 26, 22, 4);
+
+  // head
+  ctx.fillStyle = "#ffcc99";
+  ctx.beginPath();
+  ctx.arc(x + 17, y + 6, 10, 0, Math.PI * 2);
+  ctx.fill();
+
+  // mask
+  ctx.fillStyle = cosmetics.mask;
+  ctx.fillRect(x + 7, y + 2, 20, 6);
+
+  // eyes
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(x + 10, y + 4, 6, 2);
+  ctx.fillRect(x + 19, y + 4, 6, 2);
+
+  // emblem
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(x + 17, y + 20, 4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ----------------------------
+// Update + draw loop
+// ----------------------------
 function update() {
-  if (!started || gameOver) return;
+  if (!started || gameOver || paused) return;
 
   // physics
   hero.vy += GRAVITY;
   hero.y += hero.vy;
 
-  // boundaries
-  if (hero.y + hero.h > canvas.height) {
-    hero.y = canvas.height - hero.h;
-    endGame();
-    return;
-  }
-  if (hero.y < 0) {
-    hero.y = 0;
-    endGame();
-    return;
-  }
+  // bounds
+  if (hero.y + hero.h > canvas.height) { hero.y = canvas.height - hero.h; endGame(); return; }
+  if (hero.y < 0) { hero.y = 0; endGame(); return; }
 
   // spawn
-  if (frame % SPAWN_EVERY_FRAMES === 0) {
-    spawnBuildingPair();
-  }
+  if (frame % SPAWN_EVERY_FRAMES === 0) spawnBuildingPair();
 
-  // move + collide + score
+  // move/collide/score
+  const spd = buildingSpeed();
   for (const b of buildings) {
-    b.x -= BUILDING_SPEED;
+    b.x -= spd;
 
     const gapTop = b.top;
     const gapBottom = b.top + GAP_SIZE;
     const right = b.x + BUILDING_WIDTH;
 
-    const heroRight = hero.x + hero.w;
-    const heroBottom = hero.y + hero.h;
+    // power-up positioning + pickup
+    if (b.power && !b.power.taken) {
+      b.power.x = b.x + BUILDING_WIDTH / 2;
+      const dx = (hero.x + hero.w / 2) - b.power.x;
+      const dy = (hero.y + hero.h / 2) - b.power.y;
+      if (Math.hypot(dx, dy) < POWERUP_SIZE + 12) {
+        b.power.taken = true;
+        applyPower(b.power.type);
+      }
+    }
 
-    const xOverlap = heroRight > b.x && hero.x < right;
-    if (xOverlap) {
-      const hitTop = hero.y < gapTop;
-      const hitBottom = heroBottom > gapBottom;
-      if (hitTop || hitBottom) {
+    // collision
+    const hit = heroHitBuilding(gapTop, gapBottom, b.x, right);
+    if (hit) {
+      if (now() < shieldUntil) {
+        shieldUntil = 0;
+        toastMsg("Shield saved you!");
+        ensureAudio();
+        sfxPower();
+      } else {
         endGame();
         return;
       }
     }
 
-    // score when you pass the building pair
+    // score on passing buildings
     if (!b.passed && right < hero.x) {
       b.passed = true;
       score++;
       scoreText.textContent = String(score);
+      ensureAudio();
+      sfxScore();
+
+      coins += 1;
+      coinsText.textContent = String(coins);
+      saveAll();
+
+      // mild difficulty ramp
+      if (score % 10 === 0) speedMult = Math.min(1.25, speedMult + 0.05);
     }
   }
 
-  // cleanup offscreen
-  buildings = buildings.filter(b => b.x + BUILDING_WIDTH > -40);
+  buildings = buildings.filter(b => b.x + BUILDING_WIDTH > -60);
 }
 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
   drawSky();
+  drawParallaxCity();
 
-  // buildings (top + bottom)
   for (const b of buildings) {
     drawBuilding(b.x, 0, BUILDING_WIDTH, b.top);
     const gapBottom = b.top + GAP_SIZE;
     drawBuilding(b.x, gapBottom, BUILDING_WIDTH, canvas.height - gapBottom);
+    drawPowerup(b.power);
   }
 
-  drawHero(hero.x, hero.y);
+  drawHero();
 
-  if (gameOver) {
-    ctx.fillStyle = "rgba(0,0,0,0.8)";
-    ctx.font = "34px Arial";
-    ctx.fillText("Game Over", 98, 290);
-    ctx.font = "14px Arial";
-    ctx.fillText("Tap Reset (or tap canvas) to restart", 78, 320);
+  if (paused && menu.classList.contains("hidden")) {
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
+    ctx.font = "28px Arial";
+    ctx.fillText("Paused", 145, 290);
   }
 }
 
@@ -372,42 +628,117 @@ function loop() {
   animationId = requestAnimationFrame(loop);
 }
 
-/* ---------- Input / mobile fixes ---------- */
-
-// prevent double-click zoom behaviors
+// ----------------------------
+// Input + mobile zoom fix
+// ----------------------------
 document.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
 
-// pointer controls (best for mobile + desktop)
 canvas.addEventListener("pointerdown", (e) => {
   e.preventDefault();
-  if (gameOver) reset();
-  else flap();
+  ensureAudio();
+  if (menu.classList.contains("hidden")) {
+    if (gameOver) reset();
+    else { hero.vy = LIFT; sfxFlap(); }
+  }
 }, { passive: false });
 
-// spacebar
 document.addEventListener("keydown", (e) => {
-  if (e.code === "Space") {
-    e.preventDefault();
+  if (e.code !== "Space") return;
+  e.preventDefault();
+  ensureAudio();
+  if (menu.classList.contains("hidden")) {
     if (gameOver) reset();
-    else flap();
+    else { hero.vy = LIFT; sfxFlap(); }
   }
 });
 
-// buttons
+// ----------------------------
+// UI wiring
+// ----------------------------
 resetButton.addEventListener("click", () => reset());
-nameButton.addEventListener("click", () => promptForName());
-startButton.addEventListener("click", () => {
-  if (gameOver) reset();
-  else flap();
+pauseButton.addEventListener("click", () => togglePause());
+
+playButton.addEventListener("click", () => startPlay());
+
+settingsButton.addEventListener("click", () => {
+  settingsPanel.classList.toggle("hidden");
+  shopPanel.classList.add("hidden");
 });
 
-/* ---------- Boot ---------- */
-(function boot() {
-  const existing = getPlayerName();
-  if (existing) playerNameText.textContent = existing;
-  else promptForName();
+closeSettings.addEventListener("click", () => {
+  settingsPanel.classList.add("hidden");
+  shopPanel.classList.add("hidden");
+});
 
-  renderLeaderboard();
+shopButton.addEventListener("click", () => shopPanel.classList.toggle("hidden"));
+
+changeNameButton.addEventListener("click", () => promptName());
+
+// settings inputs
+soundToggle.addEventListener("change", () => {
+  settings.soundOn = !!soundToggle.checked;
+  saveAll();
+  toastMsg(settings.soundOn ? "Sound ON" : "Sound OFF");
+});
+
+suitColor.addEventListener("input", () => { cosmetics.suit = suitColor.value; saveAll(); });
+capeColor.addEventListener("input", () => { cosmetics.cape = capeColor.value; saveAll(); });
+maskColor.addEventListener("input", () => { cosmetics.mask = maskColor.value; saveAll(); });
+
+trailSelect.addEventListener("change", () => {
+  const v = trailSelect.value;
+  if (v === "spark" && !unlocks.spark) { toastMsg("Spark is locked. Buy it in Shop."); trailSelect.value = "none"; return; }
+  if (v === "neon" && !unlocks.neon) { toastMsg("Neon is locked. Buy it in Shop."); trailSelect.value = "none"; return; }
+  cosmetics.trail = v;
+  saveAll();
+});
+
+// shop
+buySpark.addEventListener("click", () => {
+  if (unlocks.spark) return toastMsg("Spark already unlocked.");
+  if (coins < 50) return toastMsg("Need 50 coins.");
+  coins -= 50;
+  unlocks.spark = true;
+  coinsText.textContent = String(coins);
+  saveAll();
+  toastMsg("Spark unlocked!");
+});
+
+buyNeon.addEventListener("click", () => {
+  if (unlocks.neon) return toastMsg("Neon already unlocked.");
+  if (coins < 120) return toastMsg("Need 120 coins.");
+  coins -= 120;
+  unlocks.neon = true;
+  coinsText.textContent = String(coins);
+  saveAll();
+  toastMsg("Neon unlocked!");
+});
+
+// ----------------------------
+// Boot
+// ----------------------------
+(function boot() {
+  loadAll();
+
+  const name = ensureName();
+  playerNameText.textContent = name;
+
+  // reflect UI
+  soundToggle.checked = !!settings.soundOn;
+  suitColor.value = cosmetics.suit;
+  capeColor.value = cosmetics.cape;
+  maskColor.value = cosmetics.mask;
+  trailSelect.value = cosmetics.trail;
+
+  coinsText.textContent = String(coins);
+
+  renderLocalBoard();
+
+  // show menu at start
+  menu.classList.remove("hidden");
+  settingsPanel.classList.add("hidden");
+  shopPanel.classList.add("hidden");
+
   initGame();
   loop();
 })();

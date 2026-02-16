@@ -2,43 +2,96 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Sky Hero Dash</title>
-
-  <!-- Cache-busted CSS -->
-  <link rel="stylesheet" href="style.css?v=5" />
+  <link rel="stylesheet" href="style.css?v=7" />
 </head>
 <body>
   <div id="app">
-    <h1 id="title">Sky Hero Dash</h1>
-
     <div id="topbar">
       <div class="pill">Player: <span id="playerName">—</span></div>
       <div class="pill">Score: <span id="scoreText">0</span></div>
       <div class="pill">Best: <span id="bestText">0</span></div>
+      <button id="pauseButton" class="btn secondary">Pause</button>
       <button id="resetButton" class="btn">Reset</button>
-      <button id="nameButton" class="btn secondary">Change name</button>
     </div>
 
     <canvas id="gameCanvas" width="400" height="600"></canvas>
 
-    <div id="overlay" class="overlay hidden">
-      <div class="overlayCard">
-        <div id="overlayTitle">Tap to start</div>
-        <div id="overlayHint">Tap / Space to fly</div>
-        <button id="startButton" class="btn">Start</button>
+    <!-- HOME / MENU -->
+    <div id="menu" class="menu">
+      <div class="menuCard">
+        <div class="title">Sky Hero Dash</div>
+        <div class="subtitle">Fly the hero. Dodge buildings. Collect power-ups.</div>
+
+        <div class="menuRow">
+          <button id="playButton" class="btn big">Play</button>
+          <button id="settingsButton" class="btn big secondary">Settings</button>
+        </div>
+
+        <div id="settingsPanel" class="panel hidden">
+          <div class="panelTitle">Settings</div>
+
+          <label class="toggle">
+            <input id="soundToggle" type="checkbox" />
+            <span>Sound</span>
+          </label>
+
+          <div class="panelTitle">Customize Hero</div>
+          <div class="grid">
+            <div class="field">
+              <div class="label">Suit</div>
+              <input id="suitColor" type="color" value="#1f4bff" />
+            </div>
+            <div class="field">
+              <div class="label">Cape</div>
+              <input id="capeColor" type="color" value="#d10000" />
+            </div>
+            <div class="field">
+              <div class="label">Mask</div>
+              <input id="maskColor" type="color" value="#111111" />
+            </div>
+            <div class="field">
+              <div class="label">Trail</div>
+              <select id="trailSelect">
+                <option value="none">None</option>
+                <option value="spark">Spark (unlock)</option>
+                <option value="neon">Neon (unlock)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="wallet">
+            Coins: <span id="coinsText">0</span>
+            <button id="shopButton" class="btn small secondary">Shop</button>
+          </div>
+
+          <div id="shopPanel" class="panel subtle hidden">
+            <div class="panelTitle">Unlockables</div>
+            <div class="shopList">
+              <button id="buySpark" class="btn small">Buy Spark Trail (50)</button>
+              <button id="buyNeon" class="btn small">Buy Neon Trail (120)</button>
+            </div>
+            <div class="hint">Earn coins by passing buildings (+1) and grabbing power-ups (+5).</div>
+          </div>
+
+          <div class="menuRow">
+            <button id="changeNameButton" class="btn secondary">Change name</button>
+            <button id="closeSettings" class="btn secondary">Close</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panelTitle">Top 5 (This device)</div>
+          <ol id="localLeaderboard"></ol>
+          <div class="hint">This leaderboard is saved on each phone/browser only.</div>
+        </div>
       </div>
     </div>
 
-    <div id="leaderboardWrap">
-      <h2>Top 5</h2>
-      <ol id="leaderboard"></ol>
-      <div class="tinyNote">Leaderboard is saved on each device.</div>
-    </div>
+    <div id="toast" class="toast hidden"></div>
   </div>
 
-  <!-- Cache-busted JS -->
-  <script src="game.js?v=5"></script>
+  <script src="game.js?v=7"></script>
 </body>
 </html>

@@ -6,8 +6,6 @@ html, body {
   height: 100%;
   background: #70c5ce;
   font-family: Arial, sans-serif;
-
-  /* Helps prevent double-tap zoom in many browsers */
   touch-action: manipulation;
 }
 
@@ -16,13 +14,9 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12px;
+  padding: 10px;
   box-sizing: border-box;
-}
-
-#title{
-  margin: 8px 0 10px 0;
-  font-size: 22px;
+  gap: 10px;
 }
 
 #topbar{
@@ -31,7 +25,6 @@ html, body {
   gap: 8px;
   align-items: center;
   justify-content: center;
-  margin-bottom: 10px;
 }
 
 .pill{
@@ -45,56 +38,26 @@ html, body {
 .btn{
   border: 2px solid #000;
   background: #fff;
-  padding: 6px 10px;
-  border-radius: 10px;
-  font-weight: bold;
+  padding: 7px 11px;
+  border-radius: 12px;
+  font-weight: 900;
   cursor: pointer;
 }
 
-.btn.secondary{
-  opacity: 0.9;
-}
+.btn.secondary{ opacity: 0.92; }
+.btn.big{ padding: 10px 14px; font-size: 16px; }
+.btn.small{ padding: 6px 10px; font-size: 13px; }
 
 canvas{
   background: #fff;
   border: 3px solid #000;
-  border-radius: 12px;
-
-  /* Important for mobile: reduces scroll/zoom gesture conflicts */
+  border-radius: 14px;
   touch-action: manipulation;
+  max-width: 95vw;
+  height: auto;
 }
 
-#leaderboardWrap{
-  width: min(420px, 95vw);
-  margin-top: 12px;
-  background: rgba(255,255,255,0.88);
-  border: 2px solid #000;
-  border-radius: 12px;
-  padding: 10px 12px;
-  box-sizing: border-box;
-}
-
-#leaderboardWrap h2{
-  margin: 0 0 8px 0;
-  font-size: 16px;
-}
-
-#leaderboard{
-  margin: 0;
-  padding-left: 22px;
-}
-
-#leaderboard li{
-  margin: 4px 0;
-}
-
-.tinyNote{
-  margin-top: 8px;
-  font-size: 12px;
-  opacity: 0.8;
-}
-
-.overlay{
+.menu{
   position: fixed;
   inset: 0;
   display: grid;
@@ -102,25 +65,109 @@ canvas{
   background: rgba(0,0,0,0.35);
 }
 
-.overlayCard{
-  background: #fff;
+.menuCard{
+  width: min(420px, 92vw);
+  background: rgba(255,255,255,0.92);
   border: 3px solid #000;
-  border-radius: 14px;
-  padding: 14px 16px;
+  border-radius: 16px;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.title{
+  font-size: 22px;
+  font-weight: 1000;
+  margin-bottom: 4px;
   text-align: center;
-  width: min(320px, 90vw);
 }
 
-#overlayTitle{
-  font-size: 18px;
-  font-weight: bold;
-  margin-bottom: 6px;
-}
-
-#overlayHint{
-  font-size: 14px;
+.subtitle{
+  font-size: 13px;
+  opacity: 0.85;
+  text-align: center;
   margin-bottom: 10px;
-  opacity: 0.9;
 }
 
-.hidden{ display:none; }
+.menuRow{
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 10px 0;
+  flex-wrap: wrap;
+}
+
+.panel{
+  background: rgba(255,255,255,0.75);
+  border: 2px solid #000;
+  border-radius: 14px;
+  padding: 10px;
+  margin-top: 10px;
+}
+
+.panel.subtle{
+  background: rgba(255,255,255,0.55);
+}
+
+.panelTitle{
+  font-weight: 1000;
+  margin-bottom: 8px;
+}
+
+.hint{
+  font-size: 12px;
+  opacity: 0.8;
+  margin-top: 6px;
+}
+
+.hidden{ display: none; }
+
+.grid{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.field{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.label{ font-weight: 900; }
+
+.toggle{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+
+.wallet{
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 1000;
+}
+
+.shopList{
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.toast{
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.85);
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-weight: 900;
+  max-width: min(520px, 92vw);
+  text-align: center;
+}
