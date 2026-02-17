@@ -1,258 +1,235 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <meta name="theme-color" content="#0b1220" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0b1020" />
   <title>Sky Hero Dash</title>
-  <link rel="stylesheet" href="style.css?v=16" />
+  <link rel="stylesheet" href="style.css?v=18" />
 </head>
 <body>
-  <!-- Splash -->
   <div id="splash" class="splash">
     <div class="splashCard">
       <div class="splashTitle">Sky Hero Dash</div>
       <div class="splashSub">Loading…</div>
       <div class="splashBar"><div id="splashFill" class="splashFill"></div></div>
-      <div class="splashHint">Tip: Tap once to enable audio on mobile.</div>
+      <div id="versionText" class="splashVersion">v18</div>
     </div>
   </div>
 
-  <div id="app">
-    <div id="topbar">
-      <div class="pill">Player: <span id="playerName">—</span></div>
-      <div class="pill">Score: <span id="scoreText">0</span></div>
-      <div class="pill">Best: <span id="bestText">0</span></div>
-      <button id="pauseButton" class="btn secondary">Pause</button>
-      <button id="resetButton" class="btn">Reset</button>
-    </div>
+  <div class="topHud">
+    <div class="hudLeft">
+      <div class="hudRow">
+        <span class="label">Player:</span> <span id="playerName">Player</span>
+        <button id="changeNameButton" class="btn tiny">Change</button>
+      </div>
 
-    <canvas id="gameCanvas" width="400" height="600"></canvas>
-
-    <!-- Overlay (starts hidden) -->
-    <div id="overlay" class="overlay hidden">
-      <div class="overlayCard">
-        <div id="overlayTitle" class="overlayTitle">Paused</div>
-        <div id="overlaySubtitle" class="overlaySubtitle">Take a breath.</div>
-        <div class="menuRow">
-          <button id="overlayResume" class="btn big">Resume</button>
-          <button id="overlayHome" class="btn big secondary">Home</button>
-          <button id="overlaySettings" class="btn big secondary">Settings</button>
-        </div>
-        <div class="hint" style="text-align:center;">Tip: Tap outside this box to close.</div>
+      <div class="hudRow">
+        <span class="label">Score:</span> <span id="scoreText">0</span>
+        <span class="sep">|</span>
+        <span class="label">Best:</span> <span id="bestText">0</span>
+        <span class="sep">|</span>
+        <span class="label">Coins:</span> <span id="coinsText">0</span>
       </div>
     </div>
 
-    <!-- Home -->
-    <div id="menu" class="menu">
-      <div class="menuCard">
-        <div class="title">Sky Hero Dash</div>
-        <div class="subtitle">Customize your hero, pick the vibe, then fly.</div>
-        <div class="versionText" id="versionText">v16</div>
+    <div class="hudRight">
+      <button id="pauseButton" class="btn">Pause</button>
+      <button id="resetButton" class="btn secondary">Reset</button>
+    </div>
+  </div>
 
-        <div class="menuRow">
-          <button id="playButton" class="btn big">Play</button>
-          <button id="settingsButton" class="btn big secondary">Settings</button>
+  <div class="stage">
+    <canvas id="gameCanvas" width="360" height="640"></canvas>
+  </div>
+
+  <div id="toast" class="toast hidden">Toast</div>
+
+  <!-- Home Menu -->
+  <div id="menu" class="menu">
+    <div class="card">
+      <div class="title">Sky Hero Dash</div>
+      <div class="subtitle">Mobile-ready web game</div>
+
+      <div class="menuButtons">
+        <button id="playButton" class="btn big">Play</button>
+        <button id="settingsButton" class="btn big secondary">Settings</button>
+        <button id="shopButton" class="btn big secondary">Shop</button>
+      </div>
+
+      <div class="miniInfo">
+        <div class="miniBox">
+          <div class="miniLabel">Local Top 5</div>
+          <ol id="localLeaderboard" class="leaderboard"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Panel -->
+  <div id="settingsPanel" class="panel hidden">
+    <div class="panelCard">
+      <div class="panelHeader">
+        <div class="panelTitle">Settings</div>
+        <button id="closeSettings" class="btn tiny">Close</button>
+      </div>
+
+      <div class="panelBody">
+        <div class="row">
+          <label class="switch">
+            <input id="soundToggle" type="checkbox" />
+            <span class="switchText">Sound</span>
+          </label>
+
+          <label class="switch">
+            <input id="musicToggle" type="checkbox" />
+            <span class="switchText">Music</span>
+          </label>
         </div>
 
-        <!-- Settings (scrollable) -->
-        <div id="settingsPanel" class="panel hidden scrollPanel">
-          <div class="panelTitle">Settings</div>
+        <div class="group">
+          <div class="groupTitle">Background</div>
+          <div class="row">
+            <select id="bgSelect" class="select"></select>
+          </div>
+          <canvas id="previewCanvas" width="320" height="140" class="preview"></canvas>
+        </div>
 
-          <div class="row2">
-            <label class="toggle">
-              <input id="soundToggle" type="checkbox" />
-              <span>Sound</span>
-            </label>
+        <div class="group">
+          <div class="groupTitle">Music</div>
+          <div class="row">
+            <select id="musicSelect" class="select"></select>
+          </div>
+          <div class="row">
+            <button id="musicPlayPreview" class="btn small">Play Preview</button>
+            <button id="musicStopPreview" class="btn small secondary">Stop</button>
+          </div>
+        </div>
 
-            <label class="toggle">
-              <input id="musicToggle" type="checkbox" />
-              <span>Music</span>
-            </label>
+        <div class="group">
+          <div class="groupTitle">SFX Pack</div>
+          <div class="row">
+            <select id="sfxSelect" class="select">
+              <option value="classic">Classic</option>
+              <option value="heroic">Heroic</option>
+              <option value="robot">Robot</option>
+            </select>
+          </div>
+          <div class="row">
+            <button id="sfxTestFlap" class="btn small">Flap</button>
+            <button id="sfxTestScore" class="btn small">Score</button>
+            <button id="sfxTestPower" class="btn small">Power</button>
+            <button id="sfxTestCrash" class="btn small secondary">Crash</button>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="groupTitle">Character</div>
+
+          <div class="row">
+            <div class="col">
+              <div class="labelSmall">Body</div>
+              <select id="bodySelect" class="select"></select>
+            </div>
+            <div class="col">
+              <div class="labelSmall">Head</div>
+              <select id="headSelect" class="select"></select>
+            </div>
           </div>
 
-          <div class="panelTitle">Parallax Background</div>
-          <div class="grid">
-            <div class="field" style="grid-column: 1 / -1;">
-              <div class="label">Theme</div>
-              <select id="bgSelect">
-                <option value="city_day">City (Day)</option>
-                <option value="city_night">City (Night)</option>
-                <option value="cloudy">Cloudy</option>
-                <option value="rainy">Rainy (City)</option>
-                <option value="sunset">Sunset</option>
-                <option value="neon">Neon Night</option>
-                <option value="desert">Desert</option>
-                <option value="forest">Forest</option>
-                <option value="snow">Snow</option>
-              </select>
-              <div class="hint">More themes unlock in Shop.</div>
+          <div class="row">
+            <div class="col">
+              <div class="labelSmall">Suit</div>
+              <input id="suitColor" type="color" class="color" />
             </div>
-
-            <div class="field" style="grid-column: 1 / -1;">
-              <div class="label">Preview</div>
-              <canvas id="previewCanvas" width="320" height="180"></canvas>
-              <div class="hint">Preview animates the parallax layers.</div>
+            <div class="col">
+              <div class="labelSmall">Cape</div>
+              <input id="capeColor" type="color" class="color" />
+            </div>
+            <div class="col">
+              <div class="labelSmall">Mask</div>
+              <input id="maskColor" type="color" class="color" />
             </div>
           </div>
 
-          <div class="panelTitle">Music</div>
-          <div class="grid">
-            <div class="field" style="grid-column: 1 / -1;">
-              <div class="label">Track</div>
-              <select id="musicSelect">
+          <canvas id="heroPreviewCanvas" width="320" height="140" class="preview"></canvas>
+        </div>
+
+        <div class="group">
+          <div class="groupTitle">Cosmetics</div>
+          <div class="row">
+            <div class="col">
+              <div class="labelSmall">Trail</div>
+              <select id="trailSelect" class="select">
                 <option value="none">None</option>
-                <option value="chill">Chill Loop</option>
-                <option value="arcade">Arcade Pulse</option>
-                <option value="night">Night Drive</option>
+                <option value="spark">Spark</option>
+                <option value="neon">Neon</option>
+                <option value="smoke">Smoke</option>
+                <option value="confetti">Confetti</option>
+                <option value="embers">Embers</option>
+                <option value="bubbles">Bubbles</option>
+                <option value="stars">Star Dust</option>
+                <option value="glitch">Glitch</option>
               </select>
             </div>
-
-            <div class="field" style="grid-column: 1 / -1;">
-              <div class="label">Preview Controls</div>
-              <div class="buttonRow">
-                <button id="musicPlayPreview" class="btn small">Play Preview</button>
-                <button id="musicStopPreview" class="btn small secondary">Stop</button>
-              </div>
-              <div class="hint">If nothing plays, tap the game canvas once, then try again.</div>
-            </div>
-          </div>
-
-          <div class="panelTitle">Character Sound Style</div>
-          <div class="grid">
-            <div class="field" style="grid-column: 1 / -1;">
-              <div class="label">SFX Pack</div>
-              <select id="sfxSelect">
-                <option value="classic">Classic</option>
-                <option value="heroic">Heroic</option>
-                <option value="robot">Robot</option>
-              </select>
-              <div class="buttonRow" style="margin-top:8px;">
-                <button id="sfxTestFlap" class="btn small">Test Flap</button>
-                <button id="sfxTestScore" class="btn small">Test Score</button>
-                <button id="sfxTestPower" class="btn small">Test Power</button>
-                <button id="sfxTestCrash" class="btn small secondary">Test Crash</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="panelTitle">Customize Hero</div>
-
-          <div class="grid">
-            <div class="field" style="grid-column: 1 / -1;">
-              <div class="label">Hero Preview</div>
-              <canvas id="heroPreviewCanvas" width="320" height="180"></canvas>
-              <div class="hint">Trails + Aura are cosmetic. Power-ups are gameplay.</div>
-            </div>
-
-            <div class="field">
-              <div class="label">Body</div>
-              <select id="bodySelect">
-                <option value="classic">Classic</option>
-                <option value="armored">Armored</option>
-                <option value="speed">Speed Suit</option>
-                <option value="animal_cat">Animal: Cat</option>
-                <option value="animal_dog">Animal: Dog</option>
-                <option value="animal_fox">Animal: Fox</option>
-                <option value="bee">Bee</option>
-                <option value="skeleton">Skeleton</option>
-              </select>
-            </div>
-
-            <div class="field">
-              <div class="label">Head</div>
-              <select id="headSelect">
-                <option value="classic">Classic</option>
-                <option value="helmet">Helmet</option>
-                <option value="hood">Hood</option>
-                <option value="animal_cat">Animal: Cat</option>
-                <option value="animal_dog">Animal: Dog</option>
-                <option value="animal_fox">Animal: Fox</option>
-                <option value="bee">Bee</option>
-                <option value="skeleton">Skeleton</option>
-              </select>
-            </div>
-
-            <div class="field">
-              <div class="label">Suit / Fur</div>
-              <input id="suitColor" type="color" value="#1f4bff" />
-            </div>
-
-            <div class="field">
-              <div class="label">Cape</div>
-              <input id="capeColor" type="color" value="#d10000" />
-            </div>
-
-            <div class="field">
-              <div class="label">Mask</div>
-              <input id="maskColor" type="color" value="#111111" />
-            </div>
-
-            <div class="field">
-              <div class="label">Trail</div>
-              <select id="trailSelect">
+            <div class="col">
+              <div class="labelSmall">Aura</div>
+              <select id="auraSelect" class="select">
                 <option value="none">None</option>
-                <option value="spark">Spark (unlock)</option>
-                <option value="neon">Neon (unlock)</option>
-                <option value="smoke">Smoke (unlock)</option>
-                <option value="confetti">Confetti (unlock)</option>
-                <option value="embers">Embers (unlock)</option>
-                <option value="bubbles">Bubbles (unlock)</option>
-                <option value="stars">Star Dust (unlock)</option>
-                <option value="glitch">Glitch (unlock)</option>
+                <option value="halo">Halo</option>
+                <option value="shadow">Shadow</option>
+                <option value="pulse">Pulse</option>
+                <option value="frost">Frost</option>
               </select>
             </div>
-
-            <div class="field">
-              <div class="label">Aura</div>
-              <select id="auraSelect">
-                <option value="none">None</option>
-                <option value="halo">Halo (unlock)</option>
-                <option value="shadow">Shadow (unlock)</option>
-                <option value="pulse">Pulse (unlock)</option>
-                <option value="frost">Frost (unlock)</option>
-              </select>
-            </div>
-
-            <div class="field">
-              <div class="label">Building Style</div>
-              <select id="buildStyleSelect">
+            <div class="col">
+              <div class="labelSmall">Buildings</div>
+              <select id="buildStyleSelect" class="select">
                 <option value="brick">Brick</option>
-                <option value="glass">Glass (unlock)</option>
-                <option value="neon">Neon (unlock)</option>
-                <option value="stone">Stone (unlock)</option>
+                <option value="glass">Glass</option>
+                <option value="neon">Neon</option>
+                <option value="stone">Stone</option>
               </select>
             </div>
           </div>
-
-          <div class="wallet">
-            Coins: <span id="coinsText">0</span>
-            <button id="shopButton" class="btn small secondary">Shop</button>
-          </div>
-
-          <div id="shopPanel" class="panel subtle hidden">
-            <div class="panelTitle">Unlock Shop</div>
-            <div id="shopList" class="shopList"></div>
-            <div class="hint">Earn coins by passing buildings (+1), grabbing power-ups (+5), and end-of-run bonus.</div>
-          </div>
-
-          <div class="menuRow">
-            <button id="changeNameButton" class="btn secondary">Change name</button>
-            <button id="closeSettings" class="btn secondary">Close</button>
-          </div>
         </div>
 
-        <div class="panel">
-          <div class="panelTitle">Top 5 (This device)</div>
-          <ol id="localLeaderboard"></ol>
-          <div class="hint">Saved on each phone/browser only.</div>
+        <div class="hint">
+          Dash: quick <b>double tap</b> (needs Dash charge). Single tap = flap.
         </div>
       </div>
     </div>
-
-    <div id="toast" class="toast hidden"></div>
   </div>
 
-  <script src="game.js?v=16"></script>
+  <!-- Shop -->
+  <div id="shopPanel" class="panel hidden">
+    <div class="panelCard">
+      <div class="panelHeader">
+        <div class="panelTitle">Shop</div>
+        <button id="closeShop" class="btn tiny">Close</button>
+      </div>
+      <div class="panelBody">
+        <div class="hint">Earn coins by scoring + picking up power-ups.</div>
+        <div id="shopList" class="shopList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause / Game Over Overlay -->
+  <div id="overlay" class="overlay hidden">
+    <div class="overlayCard">
+      <div id="overlayTitle" class="overlayTitle">Paused</div>
+      <div id="overlaySubtitle" class="overlaySubtitle">Resume or go home.</div>
+
+      <div class="overlayButtons">
+        <button id="overlayResume" class="btn big">Resume</button>
+        <button id="overlaySettings" class="btn big secondary">Settings</button>
+        <button id="overlayHome" class="btn big secondary">Home</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js?v=18"></script>
 </body>
 </html>

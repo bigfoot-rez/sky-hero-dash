@@ -1,9 +1,9 @@
 // ============================
 // SKY HERO DASH
-// v17: dash power-up spawn + shield stacks (max 3) + dash doesn't use shields
+// v18: FIX head/body switching (auto-filled selects) + more bodies/heads + more music tracks
 // ============================
 
-const APP_VERSION = "v17";
+const APP_VERSION = "v18";
 
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -23,6 +23,7 @@ const closeSettings = document.getElementById("closeSettings");
 const settingsPanel = document.getElementById("settingsPanel");
 const shopButton = document.getElementById("shopButton");
 const shopPanel = document.getElementById("shopPanel");
+const closeShop = document.getElementById("closeShop");
 const shopList = document.getElementById("shopList");
 const changeNameButton = document.getElementById("changeNameButton");
 const versionText = document.getElementById("versionText");
@@ -82,15 +83,42 @@ const LS = {
   name: "skyhero_name_v1",
   best: "skyhero_best_v1",
   coins: "skyhero_coins_v1",
-  unlocks: "skyhero_unlocks_v16",
-  settings: "skyhero_settings_v16",
-  cosmetics: "skyhero_cosmetics_v16",
+  unlocks: "skyhero_unlocks_v18",
+  settings: "skyhero_settings_v18",
+  cosmetics: "skyhero_cosmetics_v18",
   localBoard: "skyhero_localboard_v1",
 };
 
 // ----------------------------
-// Content definitions
+// DEFINITIONS (single source of truth)
 // ----------------------------
+const BODY_OPTIONS = [
+  ["classic", "Classic"],
+  ["armored", "Armored"],
+  ["speed", "Speed Suit"],
+  ["chunky", "Chunky"],
+  ["slim", "Slim"],
+  ["jetpack", "Jetpack"],
+  ["drone", "Drone"],
+  ["animal_cat", "Animal: Cat"],
+  ["animal_fox", "Animal: Fox"],
+  ["animal_dog", "Animal: Dog"],
+  ["animal_owl", "Animal: Owl"],
+];
+
+const HEAD_OPTIONS = [
+  ["classic", "Classic"],
+  ["helmet", "Helmet"],
+  ["hood", "Hood"],
+  ["robot", "Robot"],
+  ["bee", "Bee"],
+  ["skeleton", "Skeleton"],
+  ["animal_cat", "Cat"],
+  ["animal_fox", "Fox"],
+  ["animal_dog", "Dog"],
+  ["animal_owl", "Owl"],
+];
+
 const THEME_META = {
   city_day:   { label: "City (Day)",    locked: false },
   city_night: { label: "City (Night)",  locked: false },
@@ -141,16 +169,16 @@ const GAP_SIZE = 170;
 const SPAWN_EVERY_FRAMES = 90;
 
 // powerups
-const POWERUP_CHANCE = 0.28;           // chance a pair has a power-up at all
+const POWERUP_CHANCE = 0.28;
 const POWERUP_SIZE = 18;
-const DASH_PICKUP_WEIGHT = 0.45;       // if a powerup spawns, chance it's dash (rest shield)
+const DASH_PICKUP_WEIGHT = 0.45;
 const MAX_SHIELDS = 3;
 const MAX_DASH = 2;
 
 // dash behavior
-const DASH_DURATION_MS = 750;          // how long dash lasts
-const DASH_SPEED_MULT = 3.15;          // how fast buildings move during dash
-const DASH_TAP_WINDOW_MS = 230;        // quick double-tap window for dash trigger
+const DASH_DURATION_MS = 750;
+const DASH_SPEED_MULT = 3.15;
+const DASH_TAP_WINDOW_MS = 230;
 
 // Invuln after shield hit
 const SHIELD_IFRAME_MS = 950;
@@ -170,13 +198,11 @@ let hero, buildings, score, best, gameOver, started, paused;
 let frame = 0;
 let speedMult = 1;
 
-// NEW: stacking shields + dash charges
-let shieldCharges = 0;   // 0..3
-let dashCharges = 0;     // 0..2
-let dashUntil = 0;       // active dash end time
-let iframesUntil = 0;    // short invuln after shield blocks hit
+let shieldCharges = 0;
+let dashCharges = 0;
+let dashUntil = 0;
+let iframesUntil = 0;
 
-// tap timing for dash trigger
 let lastTapAt = 0;
 
 // Settings + cosmetics + unlocks
@@ -199,7 +225,7 @@ let cosmetics = {
   head: "classic",
 };
 
-let unlocks = {}; // {unlockKey:true}
+let unlocks = {};
 let coins = 0;
 
 // ----------------------------
@@ -231,20 +257,39 @@ function saveAll() {
 function isUnlocked(key) { return !!unlocks[key]; }
 function unlock(key) { unlocks[key] = true; saveAll(); }
 
+function setSelectOptions(selectEl, options, currentValue, fallbackValue) {
+  if (!selectEl) return;
+  selectEl.innerHTML = "";
+  for (const [value, label] of options) {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    selectEl.appendChild(opt);
+  }
+  const values = new Set(options.map(o => o[0]));
+  selectEl.value = values.has(currentValue) ? currentValue : fallbackValue;
+}
+
 function loadAll() {
   settings = { ...settings, ...loadJSON(LS.settings, settings) };
   cosmetics = { ...cosmetics, ...loadJSON(LS.cosmetics, cosmetics) };
   unlocks = { ...unlocks, ...loadJSON(LS.unlocks, {}) };
   coins = Math.max(0, Number(localStorage.getItem(LS.coins) || "0"));
 
+  // clamp known values
   const bgOK = new Set(Object.keys(THEME_META));
   if (!bgOK.has(settings.background)) settings.background = "city_day";
 
-  const musicOK = new Set(["none", "chill", "arcade", "night"]);
+  const musicOK = new Set(["none","chill","arcade","night","lofi","runner","storm","neonpulse"]);
   if (!musicOK.has(settings.music)) settings.music = "chill";
 
   const sfxOK = new Set(["classic", "heroic", "robot"]);
   if (!sfxOK.has(settings.sfxPack)) settings.sfxPack = "classic";
+
+  const bodyOK = new Set(BODY_OPTIONS.map(x => x[0]));
+  const headOK = new Set(HEAD_OPTIONS.map(x => x[0]));
+  if (!bodyOK.has(cosmetics.body)) cosmetics.body = "classic";
+  if (!headOK.has(cosmetics.head)) cosmetics.head = "classic";
 
   if (cosmetics.trail !== "none" && !isUnlocked(TRAILS[cosmetics.trail]?.unlockKey)) cosmetics.trail = "none";
   if (cosmetics.aura !== "none" && !isUnlocked(AURAS[cosmetics.aura]?.unlockKey)) cosmetics.aura = "none";
@@ -396,11 +441,30 @@ function playSfx(kind) {
   oscNote(p.f, p.d, p.t, p.g);
 }
 
+// NEW tracks
 const MUSIC = {
+  none:   { bpm: 0,   steps: [], type:"sine", gain:0 },
+
   chill:  { bpm: 92,  steps: [[220,440],[247,494],[262,523],[247,494],[196,392],[220,440],[247,494],[220,440]], type:"sine",     gain:0.025 },
   arcade: { bpm: 120, steps: [[330],[392],[440],[392],[523],[392],[440],[392]],                         type:"square",   gain:0.018 },
-  night:  { bpm: 98,  steps: [[185,370],[207,414],[233,466],[207,414],[155,311],[185,370],[207,414],[185,370]], type:"triangle", gain:0.022 }
+  night:  { bpm: 98,  steps: [[185,370],[207,414],[233,466],[207,414],[155,311],[185,370],[207,414],[185,370]], type:"triangle", gain:0.022 },
+
+  lofi:   { bpm: 84,  steps: [[196,392],[220,440],[196,392],[175,349],[196,392],[220,440],[262,523],[220,440]], type:"sine",     gain:0.022 },
+  runner: { bpm: 130, steps: [[392],[440],[523],[440],[392],[349],[392],[440]],                         type:"square",   gain:0.017 },
+  storm:  { bpm: 100, steps: [[147,294],[165,330],[175,349],[165,330],[131,262],[147,294],[165,330],[147,294]], type:"triangle", gain:0.021 },
+  neonpulse:{ bpm:112,steps: [[233],[311],[392],[311],[466],[392],[311],[233]],                          type:"sawtooth", gain:0.016 },
 };
+
+const MUSIC_OPTIONS = [
+  ["none", "None"],
+  ["chill", "Chill"],
+  ["arcade", "Arcade"],
+  ["night", "Night"],
+  ["lofi", "Lo-Fi"],
+  ["runner", "Runner"],
+  ["storm", "Storm"],
+  ["neonpulse", "Neon Pulse"],
+];
 
 function stopMusic() {
   if (musicTimer) clearInterval(musicTimer);
@@ -423,11 +487,10 @@ function startMusicLoop({ force = false, preview = false } = {}) {
   if (!audioCtx) return;
 
   const key = settings.music;
-  if (key === "none") return;
+  if (!MUSIC[key] || key === "none") return;
 
   const m = MUSIC[key];
   const stepMs = Math.round((60_000 / m.bpm) / 2);
-
   musicPreviewActive = !!preview;
 
   musicTimer = setInterval(() => {
@@ -512,7 +575,6 @@ function initGame() {
   frame = 0;
   speedMult = 1;
 
-  // NEW
   shieldCharges = 0;
   dashCharges = 0;
   dashUntil = 0;
@@ -592,10 +654,7 @@ function endGame() {
 // Buildings + powerups
 // ----------------------------
 function choosePowerType() {
-  // If a powerup spawns, decide dash vs shield.
-  // Bias toward shield early game (optional feel): dash slightly less common at score < 6
-  const base = DASH_PICKUP_WEIGHT;
-  const w = (score < 6) ? Math.max(0.25, base - 0.15) : base;
+  const w = (score < 6) ? Math.max(0.25, DASH_PICKUP_WEIGHT - 0.15) : DASH_PICKUP_WEIGHT;
   return (Math.random() < w) ? "dash" : "shield";
 }
 
@@ -607,12 +666,7 @@ function spawnBuildingPair() {
 
   let power = null;
   if (Math.random() < POWERUP_CHANCE) {
-    power = {
-      type: choosePowerType(),
-      x: canvas.width + 10 + BUILDING_WIDTH/2,
-      y: top + GAP_SIZE/2,
-      taken: false
-    };
+    power = { type: choosePowerType(), x: canvas.width + 10 + BUILDING_WIDTH/2, y: top + GAP_SIZE/2, taken: false };
   }
 
   buildings.push({ x: canvas.width + 10, top, passed: false, power });
@@ -631,14 +685,12 @@ function applyPower(type) {
   if (type === "shield") {
     const before = shieldCharges;
     shieldCharges = Math.min(MAX_SHIELDS, shieldCharges + 1);
-    if (shieldCharges > before) toastMsg(`Shield +1 (x${shieldCharges})`);
-    else toastMsg(`Shields full (x${shieldCharges})`);
+    toastMsg(shieldCharges > before ? `Shield +1 (x${shieldCharges})` : `Shields full (x${shieldCharges})`);
     playSfx("power");
   } else if (type === "dash") {
     const before = dashCharges;
     dashCharges = Math.min(MAX_DASH, dashCharges + 1);
-    if (dashCharges > before) toastMsg(`Dash ready (x${dashCharges})`);
-    else toastMsg(`Dash full (x${dashCharges})`);
+    toastMsg(dashCharges > before ? `Dash ready (x${dashCharges})` : `Dash full (x${dashCharges})`);
     playSfx("dash");
   } else {
     toastMsg("Power-up!");
@@ -657,7 +709,7 @@ function tryDashTrigger() {
 
   dashCharges -= 1;
   dashUntil = now() + DASH_DURATION_MS;
-  iframesUntil = Math.max(iframesUntil, now() + 200); // tiny buffer at start
+  iframesUntil = Math.max(iframesUntil, now() + 200);
   toastMsg(`DASH! (${dashCharges} left)`);
   playSfx("dash");
   return true;
@@ -672,10 +724,8 @@ function heroHitBuilding(gapTop, gapBottom, bX, bRight) {
 }
 
 // ----------------------------
-// Background + visuals
-// (kept from v16)
+// Background + buildings visuals (same as your v16/v17 vibe)
 // ----------------------------
-
 function drawStars(ctx2, f, starArr) {
   ctx2.save();
   ctx2.fillStyle = "#fff";
@@ -824,6 +874,7 @@ function drawBackground(ctx2, f, w, h, bg, starArr, rainArr, snowArr) {
   ctx2.fillRect(0,0,w,h);
 
   if (bg === "city_night" || bg === "neon") drawStars(ctx2, f, starArr);
+
   if (bg === "sunset") {
     ctx2.save();
     ctx2.globalAlpha = 0.35;
@@ -869,9 +920,7 @@ function drawBackground(ctx2, f, w, h, bg, starArr, rainArr, snowArr) {
   }
 }
 
-// ----------------------------
-// Buildings visuals
-// ----------------------------
+// Buildings
 function drawBrickBuilding(x, y, width, height) {
   ctx.fillStyle = "#7a0a0a";
   ctx.fillRect(x, y, width, height);
@@ -993,19 +1042,13 @@ function drawPowerup(p) {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("D", 0, 1);
-  } else {
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
-    ctx.beginPath();
-    ctx.arc(0, 0, POWERUP_SIZE, 0, Math.PI*2);
-    ctx.fill();
   }
 
   ctx.restore();
 }
 
 // ----------------------------
-// Hero visuals (same as v16)
-// (kept; only changed shielded logic + dash glow)
+// Hero visuals (FULL: animals + new bodies/heads)
 // ----------------------------
 function drawTrail(ctx2, f, hx, hy, trail) {
   const x = hx - 6;
@@ -1177,7 +1220,141 @@ function drawAura(ctx2, f, hx, hy, aura) {
   }
 }
 
-// --- minimal heads (kept) ---
+// Animal head (distinct)
+function drawAnimalHead(ctx2, hx, hy, kind, furColor, accentColor) {
+  ctx2.fillStyle = furColor;
+  ctx2.beginPath();
+  ctx2.arc(hx + 17, hy + 8, 10, 0, Math.PI*2);
+  ctx2.fill();
+
+  if (kind === "animal_cat") {
+    // pointy ears + whiskers
+    ctx2.beginPath();
+    ctx2.moveTo(hx + 10, hy + 2);
+    ctx2.lineTo(hx + 6, hy - 9);
+    ctx2.lineTo(hx + 14, hy - 2);
+    ctx2.closePath();
+    ctx2.fill();
+
+    ctx2.beginPath();
+    ctx2.moveTo(hx + 24, hy + 2);
+    ctx2.lineTo(hx + 28, hy - 9);
+    ctx2.lineTo(hx + 20, hy - 2);
+    ctx2.closePath();
+    ctx2.fill();
+
+    ctx2.globalAlpha = 0.40;
+    ctx2.strokeStyle = "#000";
+    ctx2.lineWidth = 1;
+    for (let i = -1; i <= 1; i++) {
+      ctx2.beginPath();
+      ctx2.moveTo(hx + 9, hy + 13 + i * 2);
+      ctx2.lineTo(hx + 2, hy + 12 + i * 2);
+      ctx2.stroke();
+
+      ctx2.beginPath();
+      ctx2.moveTo(hx + 25, hy + 13 + i * 2);
+      ctx2.lineTo(hx + 32, hy + 12 + i * 2);
+      ctx2.stroke();
+    }
+    ctx2.globalAlpha = 1;
+
+    ctx2.fillStyle = accentColor;
+    ctx2.beginPath();
+    ctx2.moveTo(hx + 17, hy + 14);
+    ctx2.lineTo(hx + 14.5, hy + 11.5);
+    ctx2.lineTo(hx + 19.5, hy + 11.5);
+    ctx2.closePath();
+    ctx2.fill();
+  }
+
+  if (kind === "animal_dog") {
+    // floppy ears
+    ctx2.globalAlpha = 0.9;
+    ctx2.beginPath();
+    ctx2.ellipse(hx + 7, hy + 10, 5, 9, 0.35, 0, Math.PI*2);
+    ctx2.fill();
+    ctx2.beginPath();
+    ctx2.ellipse(hx + 27, hy + 10, 5, 9, -0.35, 0, Math.PI*2);
+    ctx2.fill();
+    ctx2.globalAlpha = 1;
+
+    // muzzle
+    ctx2.fillStyle = "rgba(255,255,255,0.6)";
+    ctx2.beginPath();
+    ctx2.ellipse(hx + 17, hy + 13, 8.5, 6, 0, 0, Math.PI*2);
+    ctx2.fill();
+
+    ctx2.fillStyle = accentColor;
+    ctx2.beginPath();
+    ctx2.arc(hx + 17, hy + 13, 2.2, 0, Math.PI*2);
+    ctx2.fill();
+  }
+
+  if (kind === "animal_fox") {
+    // taller ears + sharp muzzle
+    ctx2.beginPath();
+    ctx2.moveTo(hx + 10, hy + 2);
+    ctx2.lineTo(hx + 4, hy - 12);
+    ctx2.lineTo(hx + 16, hy - 1);
+    ctx2.closePath();
+    ctx2.fill();
+
+    ctx2.beginPath();
+    ctx2.moveTo(hx + 24, hy + 2);
+    ctx2.lineTo(hx + 30, hy - 12);
+    ctx2.lineTo(hx + 18, hy - 1);
+    ctx2.closePath();
+    ctx2.fill();
+
+    ctx2.globalAlpha = 0.45;
+    ctx2.fillStyle = "#fff";
+    ctx2.beginPath();
+    ctx2.arc(hx + 10, hy + 13, 4.5, 0, Math.PI*2);
+    ctx2.arc(hx + 24, hy + 13, 4.5, 0, Math.PI*2);
+    ctx2.fill();
+    ctx2.globalAlpha = 1;
+
+    ctx2.fillStyle = "rgba(255,255,255,0.55)";
+    ctx2.beginPath();
+    ctx2.ellipse(hx + 18, hy + 14, 8.5, 5.2, 0.2, 0, Math.PI*2);
+    ctx2.fill();
+
+    ctx2.fillStyle = accentColor;
+    ctx2.beginPath();
+    ctx2.arc(hx + 21, hy + 14, 2.0, 0, Math.PI*2);
+    ctx2.fill();
+  }
+
+  if (kind === "animal_owl") {
+    // big eyes + little beak
+    ctx2.fillStyle = "rgba(255,255,255,0.75)";
+    ctx2.beginPath();
+    ctx2.arc(hx + 12, hy + 9, 4.8, 0, Math.PI*2);
+    ctx2.arc(hx + 22, hy + 9, 4.8, 0, Math.PI*2);
+    ctx2.fill();
+
+    ctx2.fillStyle = "#111";
+    ctx2.beginPath();
+    ctx2.arc(hx + 12, hy + 9, 2.2, 0, Math.PI*2);
+    ctx2.arc(hx + 22, hy + 9, 2.2, 0, Math.PI*2);
+    ctx2.fill();
+
+    ctx2.fillStyle = accentColor;
+    ctx2.beginPath();
+    ctx2.moveTo(hx + 17, hy + 12);
+    ctx2.lineTo(hx + 14, hy + 16);
+    ctx2.lineTo(hx + 20, hy + 16);
+    ctx2.closePath();
+    ctx2.fill();
+  }
+
+  // eye highlights
+  ctx2.fillStyle = "#fff";
+  ctx2.fillRect(hx + 11, hy + 7, 5, 2);
+  ctx2.fillRect(hx + 20, hy + 7, 5, 2);
+}
+
 function drawBeeHead(ctx2, hx, hy) {
   ctx2.fillStyle = "#ffd400";
   ctx2.beginPath();
@@ -1191,19 +1368,40 @@ function drawBeeHead(ctx2, hx, hy) {
   ctx2.fillRect(hx + 11, hy + 7, 5, 2);
   ctx2.fillRect(hx + 20, hy + 7, 5, 2);
 }
+
 function drawSkeletonHead(ctx2, hx, hy) {
   ctx2.fillStyle = "#f1f1f1";
   ctx2.beginPath();
   ctx2.arc(hx + 17, hy + 8, 10, 0, Math.PI*2);
   ctx2.fill();
+
   ctx2.fillStyle = "#111";
   ctx2.beginPath();
   ctx2.arc(hx + 13, hy + 8, 2.8, 0, Math.PI*2);
   ctx2.arc(hx + 21, hy + 8, 2.8, 0, Math.PI*2);
   ctx2.fill();
+
   ctx2.globalAlpha = 0.5;
   ctx2.fillRect(hx + 11, hy + 14, 12, 2);
   ctx2.globalAlpha = 1;
+}
+
+function drawRobotHead(ctx2, hx, hy, maskColor) {
+  ctx2.fillStyle = "#b9c7d6";
+  roundedRectPath(ctx2, hx + 6, hy - 2, 22, 20, 6);
+  ctx2.fill();
+
+  ctx2.globalAlpha = 0.25;
+  ctx2.fillStyle = "#000";
+  ctx2.fillRect(hx + 8, hy + 1, 18, 4);
+  ctx2.globalAlpha = 1;
+
+  ctx2.fillStyle = maskColor;
+  ctx2.fillRect(hx + 9, hy + 7, 16, 6);
+
+  ctx2.fillStyle = "#fff";
+  ctx2.fillRect(hx + 11, hy + 9, 5, 2);
+  ctx2.fillRect(hx + 19, hy + 9, 5, 2);
 }
 
 function drawHeroVariant(ctx2, f, hx, hy, opts) {
@@ -1212,7 +1410,6 @@ function drawHeroVariant(ctx2, f, hx, hy, opts) {
   drawAura(ctx2, f, hx, hy, aura);
   drawTrail(ctx2, f, hx, hy, trail);
 
-  // dash glow
   if (dashing) {
     ctx2.save();
     ctx2.globalAlpha = 0.20;
@@ -1223,7 +1420,6 @@ function drawHeroVariant(ctx2, f, hx, hy, opts) {
     ctx2.restore();
   }
 
-  // shields ring(s)
   if (shieldCount > 0) {
     ctx2.save();
     for (let i = 0; i < shieldCount; i++) {
@@ -1239,8 +1435,8 @@ function drawHeroVariant(ctx2, f, hx, hy, opts) {
     ctx2.globalAlpha = 0.35 + 0.25 * Math.sin(f * 0.6);
   }
 
-  // cape
-  const capeAllowed = !(body === "skeleton" || body === "bee");
+  // cape rules
+  const capeAllowed = !(body === "skeleton" || body === "bee" || body === "drone");
   if (capeAllowed) {
     const flutter = Math.sin(f * 0.2) * 4;
     ctx2.fillStyle = cape;
@@ -1252,7 +1448,7 @@ function drawHeroVariant(ctx2, f, hx, hy, opts) {
     ctx2.fill();
   }
 
-  // body
+  // BODY
   if (body === "bee") {
     ctx2.fillStyle = "#ffd400";
     ctx2.beginPath();
@@ -1264,10 +1460,20 @@ function drawHeroVariant(ctx2, f, hx, hy, opts) {
     ctx2.fillRect(hx + 6, hy + 23, 22, 3);
     ctx2.fillRect(hx + 6, hy + 28, 22, 3);
     ctx2.globalAlpha = 1;
+
+    // wings
+    ctx2.globalAlpha = 0.35;
+    ctx2.fillStyle = "#b9f2ff";
+    ctx2.beginPath();
+    ctx2.ellipse(hx + 12, hy + 16, 8, 6, -0.3, 0, Math.PI*2);
+    ctx2.ellipse(hx + 22, hy + 16, 8, 6, 0.3, 0, Math.PI*2);
+    ctx2.fill();
+    ctx2.globalAlpha = 1;
   } else if (body === "skeleton") {
     ctx2.fillStyle = "#f1f1f1";
     roundedRectPath(ctx2, hx + 4, hy + 10, 26, 24, 6);
     ctx2.fill();
+
     ctx2.globalAlpha = 0.35;
     ctx2.strokeStyle = "#111";
     ctx2.lineWidth = 1;
@@ -1277,24 +1483,156 @@ function drawHeroVariant(ctx2, f, hx, hy, opts) {
       ctx2.lineTo(hx + 27, hy + 14 + i * 5);
       ctx2.stroke();
     }
+    ctx2.beginPath();
+    ctx2.moveTo(hx + 17, hy + 12);
+    ctx2.lineTo(hx + 17, hy + 33);
+    ctx2.stroke();
+    ctx2.globalAlpha = 1;
+  } else if (body === "armored") {
+    ctx2.fillStyle = suit;
+    roundedRectPath(ctx2, hx + 2, hy + 10, 30, 24, 6);
+    ctx2.fill();
+    ctx2.globalAlpha = 0.25;
+    ctx2.fillStyle = "#000";
+    ctx2.fillRect(hx + 4, hy + 12, 26, 4);
+    ctx2.fillRect(hx + 4, hy + 18, 26, 4);
+    ctx2.fillRect(hx + 4, hy + 24, 26, 4);
+    ctx2.globalAlpha = 1;
+  } else if (body === "speed") {
+    ctx2.fillStyle = suit;
+    roundedRectPath(ctx2, hx, hy + 10, 34, 24, 10);
+    ctx2.fill();
+    ctx2.globalAlpha = 0.22;
+    ctx2.fillStyle = "#fff";
+    ctx2.fillRect(hx + 6, hy + 12, 4, 20);
+    ctx2.fillRect(hx + 16, hy + 12, 3, 20);
+    ctx2.globalAlpha = 1;
+  } else if (body === "chunky") {
+    ctx2.fillStyle = suit;
+    ctx2.beginPath();
+    ctx2.ellipse(hx + 17, hy + 23, 18, 14, 0, 0, Math.PI*2);
+    ctx2.fill();
+    ctx2.globalAlpha = 0.18;
+    ctx2.fillStyle = "#000";
+    ctx2.beginPath();
+    ctx2.arc(hx + 12, hy + 24, 4, 0, Math.PI*2);
+    ctx2.arc(hx + 22, hy + 24, 4, 0, Math.PI*2);
+    ctx2.fill();
+    ctx2.globalAlpha = 1;
+  } else if (body === "slim") {
+    ctx2.fillStyle = suit;
+    roundedRectPath(ctx2, hx + 8, hy + 10, 18, 24, 8);
+    ctx2.fill();
+    ctx2.globalAlpha = 0.18;
+    ctx2.fillStyle = "#fff";
+    ctx2.fillRect(hx + 16, hy + 12, 2, 20);
+    ctx2.globalAlpha = 1;
+  } else if (body === "jetpack") {
+    ctx2.fillStyle = suit;
+    roundedRectPath(ctx2, hx + 2, hy + 10, 30, 24, 8);
+    ctx2.fill();
+
+    // pack
+    ctx2.fillStyle = "#333";
+    roundedRectPath(ctx2, hx - 3, hy + 14, 9, 16, 4);
+    ctx2.fill();
+
+    // flame
+    ctx2.globalAlpha = 0.75;
+    ctx2.fillStyle = `rgba(255, ${150 + (frame%60)}, 40, 0.9)`;
+    ctx2.beginPath();
+    ctx2.moveTo(hx - 1, hy + 30);
+    ctx2.lineTo(hx - 8, hy + 40 + Math.sin(frame*0.2)*3);
+    ctx2.lineTo(hx + 3, hy + 36);
+    ctx2.closePath();
+    ctx2.fill();
+    ctx2.globalAlpha = 1;
+  } else if (body === "drone") {
+    ctx2.fillStyle = "#3a3a3a";
+    roundedRectPath(ctx2, hx + 5, hy + 16, 24, 14, 7);
+    ctx2.fill();
+
+    // rotors
+    ctx2.globalAlpha = 0.25;
+    ctx2.fillStyle = "#fff";
+    ctx2.fillRect(hx + 1, hy + 10, 12, 2);
+    ctx2.fillRect(hx + 21, hy + 10, 12, 2);
+    ctx2.globalAlpha = 1;
+
+    // lights
+    ctx2.fillStyle = "#ff3b3b";
+    ctx2.fillRect(hx + 8, hy + 22, 4, 3);
+    ctx2.fillStyle = "#00ffe0";
+    ctx2.fillRect(hx + 22, hy + 22, 4, 3);
+  } else if (body.startsWith("animal_")) {
+    // animal body = suit color as fur
+    ctx2.fillStyle = suit;
+    ctx2.beginPath();
+    ctx2.ellipse(hx + 17, hy + 24, 16, 12, 0, 0, Math.PI*2);
+    ctx2.fill();
+
+    // belly highlight
+    ctx2.globalAlpha = 0.25;
+    ctx2.fillStyle = "#fff";
+    ctx2.beginPath();
+    ctx2.ellipse(hx + 17, hy + 27, 10, 6, 0, 0, Math.PI*2);
+    ctx2.fill();
     ctx2.globalAlpha = 1;
   } else {
+    // classic
     ctx2.fillStyle = suit;
     ctx2.fillRect(hx, hy + 10, 34, 24);
     ctx2.fillStyle = "#ffd400";
     ctx2.fillRect(hx + 6, hy + 26, 22, 4);
   }
 
-  // head
+  // HEAD
   if (head === "bee") drawBeeHead(ctx2, hx, hy);
   else if (head === "skeleton") drawSkeletonHead(ctx2, hx, hy);
-  else {
+  else if (head === "robot") drawRobotHead(ctx2, hx, hy, mask);
+  else if (head.startsWith("animal_")) drawAnimalHead(ctx2, hx, hy, head, suit, mask);
+  else if (head === "helmet") {
+    ctx2.fillStyle = "#c7c7c7";
+    ctx2.beginPath();
+    ctx2.arc(hx + 17, hy + 6, 11, Math.PI, 0);
+    ctx2.lineTo(hx + 28, hy + 10);
+    ctx2.lineTo(hx + 6, hy + 10);
+    ctx2.closePath();
+    ctx2.fill();
+
+    ctx2.fillStyle = mask;
+    ctx2.fillRect(hx + 7, hy + 4, 20, 6);
+
+    ctx2.fillStyle = "#fff";
+    ctx2.fillRect(hx + 10, hy + 6, 6, 2);
+    ctx2.fillRect(hx + 19, hy + 6, 6, 2);
+  } else if (head === "hood") {
+    ctx2.fillStyle = "#2b2b2b";
+    ctx2.beginPath();
+    ctx2.arc(hx + 17, hy + 7, 12, 0, Math.PI*2);
+    ctx2.fill();
+
+    ctx2.fillStyle = "#ffcc99";
+    ctx2.beginPath();
+    ctx2.arc(hx + 17, hy + 8, 8, 0, Math.PI*2);
+    ctx2.fill();
+
+    ctx2.fillStyle = mask;
+    ctx2.fillRect(hx + 9, hy + 6, 16, 5);
+
+    ctx2.fillStyle = "#fff";
+    ctx2.fillRect(hx + 11, hy + 7, 5, 2);
+    ctx2.fillRect(hx + 20, hy + 7, 5, 2);
+  } else {
+    // classic head
     ctx2.fillStyle = "#ffcc99";
     ctx2.beginPath();
     ctx2.arc(hx + 17, hy + 6, 10, 0, Math.PI*2);
     ctx2.fill();
+
     ctx2.fillStyle = mask;
     ctx2.fillRect(hx + 7, hy + 2, 20, 6);
+
     ctx2.fillStyle = "#fff";
     ctx2.fillRect(hx + 10, hy + 4, 6, 2);
     ctx2.fillRect(hx + 19, hy + 4, 6, 2);
@@ -1325,10 +1663,9 @@ function update() {
   if (!paused && !gameOver && !overlay.classList.contains("hidden")) hideOverlayHard();
   if (!started || gameOver || paused) return;
 
-  hero.vy += effectiveGravity();
+  hero.vy += BASE_GRAVITY;
   hero.y += hero.vy;
 
-  // Still die to ground/ceiling even while dashing (keeps it fair)
   if (hero.y + hero.h > canvas.height) { hero.y = canvas.height - hero.h; endGame(); return; }
   if (hero.y < 0) { hero.y = 0; endGame(); return; }
 
@@ -1353,11 +1690,6 @@ function update() {
       }
     }
 
-    // Collision:
-    // - If dashing: ignore building collision completely
-    // - Else if iframes: ignore
-    // - Else if shieldCharges>0: consume one shield (ONLY on collision), set iframes
-    // - Else: die
     const hit = heroHitBuilding(gapTop, gapBottom, b.x, right);
 
     if (hit && !isDashing()) {
@@ -1376,7 +1708,6 @@ function update() {
       }
     }
 
-    // scoring
     if (!b.passed && right < hero.x) {
       b.passed = true;
       score++;
@@ -1407,27 +1738,17 @@ function draw() {
 
   drawHero();
 
-  // HUD buffs
+  // small HUD line
   ctx.globalAlpha = 0.92;
   ctx.fillStyle = "rgba(0,0,0,0.65)";
   ctx.font = "12px Arial";
-
   const parts = [];
   if (shieldCharges > 0) parts.push(`Shield x${shieldCharges}`);
   if (dashCharges > 0) parts.push(`Dash x${dashCharges}`);
   if (isDashing()) parts.push("DASHING");
-
   const line = parts.join(" • ");
   if (line) ctx.fillText(line, 12, 18);
-
   ctx.globalAlpha = 1;
-
-  if (paused) {
-    ctx.globalAlpha = 0.15;
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.globalAlpha = 1;
-  }
 }
 
 function drawPreview() {
@@ -1458,7 +1779,7 @@ function drawHeroPreview() {
     head: cosmetics.head,
     trail: cosmetics.trail,
     aura: cosmetics.aura,
-    shieldCount: shieldCharges,
+    shieldCount: Math.min(3, shieldCharges),
     dashing: false,
     iframes: false,
   });
@@ -1475,14 +1796,13 @@ function loop() {
 }
 
 // ----------------------------
-// Input + mobile zoom fix + dash trigger
+// Input + dash trigger
 // ----------------------------
 document.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
 
 function handleTapAction() {
   ensureAudio();
 
-  // overlay quick-resume behavior
   if (!overlay.classList.contains("hidden") && !gameOver) {
     paused = false;
     hideOverlayHard();
@@ -1491,10 +1811,8 @@ function handleTapAction() {
   }
 
   if (gameOver) { reset(); startPlay(); return; }
-
   if (!menu.classList.contains("hidden") || paused) return;
 
-  // dash: quick double-tap
   const t = now();
   const dt = t - lastTapAt;
   lastTapAt = t;
@@ -1502,11 +1820,9 @@ function handleTapAction() {
   if (dt > 0 && dt <= DASH_TAP_WINDOW_MS) {
     const dashed = tryDashTrigger();
     if (dashed) return;
-    // if no dash available, fall through to flap on second tap (feels responsive)
   }
 
-  // normal flap
-  hero.vy = effectiveLift();
+  hero.vy = BASE_LIFT;
   playSfx("flap");
 }
 
@@ -1530,14 +1846,13 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ----------------------------
-// Shop builder (same as v16)
+// Shop
 // ----------------------------
 function addShopButton(label, cost, unlockKey) {
   const b = document.createElement("button");
   b.className = "btn small";
   const owned = isUnlocked(unlockKey);
   b.textContent = owned ? `Owned: ${label}` : `Buy ${label} (${cost})`;
-
   if (owned) b.classList.add("secondary");
 
   b.addEventListener("click", () => {
@@ -1619,7 +1934,12 @@ closeSettings.addEventListener("click", () => {
   shopPanel.classList.add("hidden");
 });
 
-shopButton.addEventListener("click", () => shopPanel.classList.toggle("hidden"));
+shopButton.addEventListener("click", () => {
+  shopPanel.classList.toggle("hidden");
+  settingsPanel.classList.add("hidden");
+});
+if (closeShop) closeShop.addEventListener("click", () => shopPanel.classList.add("hidden"));
+
 changeNameButton.addEventListener("click", () => promptName());
 
 // Overlay buttons
@@ -1714,49 +2034,6 @@ suitColor.addEventListener("input", () => { cosmetics.suit = suitColor.value; sa
 capeColor.addEventListener("input", () => { cosmetics.cape = capeColor.value; saveAll(); });
 maskColor.addEventListener("input", () => { cosmetics.mask = maskColor.value; saveAll(); });
 
-trailSelect.addEventListener("change", () => {
-  const v = trailSelect.value;
-  if (v !== "none") {
-    const k = TRAILS[v]?.unlockKey;
-    if (k && !isUnlocked(k)) {
-      toastMsg("That trail is locked. Buy it in Shop.");
-      trailSelect.value = cosmetics.trail;
-      return;
-    }
-  }
-  cosmetics.trail = v;
-  saveAll();
-  toastMsg("Trail updated");
-});
-
-auraSelect.addEventListener("change", () => {
-  const v = auraSelect.value;
-  if (v !== "none") {
-    const k = AURAS[v]?.unlockKey;
-    if (k && !isUnlocked(k)) {
-      toastMsg("That aura is locked. Buy it in Shop.");
-      auraSelect.value = cosmetics.aura;
-      return;
-    }
-  }
-  cosmetics.aura = v;
-  saveAll();
-  toastMsg("Aura updated");
-});
-
-buildStyleSelect.addEventListener("change", () => {
-  const v = buildStyleSelect.value;
-  const meta = BUILD_STYLES[v];
-  if (meta?.locked && meta.unlockKey && !isUnlocked(meta.unlockKey)) {
-    toastMsg("That building style is locked. Buy it in Shop.");
-    buildStyleSelect.value = cosmetics.buildStyle;
-    return;
-  }
-  cosmetics.buildStyle = v;
-  saveAll();
-  toastMsg("Building style updated");
-});
-
 // ----------------------------
 // Splash
 // ----------------------------
@@ -1785,6 +2062,14 @@ function runSplash() {
   const name = ensureName();
   playerNameText.textContent = name;
 
+  // Fill selects from JS (fixes your switching bug forever)
+  setSelectOptions(bodySelect, BODY_OPTIONS, cosmetics.body, "classic");
+  setSelectOptions(headSelect, HEAD_OPTIONS, cosmetics.head, "classic");
+  setSelectOptions(musicSelect, MUSIC_OPTIONS, settings.music, "chill");
+
+  // Fill backgrounds (also from JS)
+  setSelectOptions(bgSelect, Object.entries(THEME_META).map(([k,v]) => [k, v.label]), settings.background, "city_day");
+
   initRain(rainDrops, canvas.width, canvas.height);
   initStars(stars, canvas.width, canvas.height);
   initSnow(snow, canvas.width, canvas.height);
@@ -1797,20 +2082,12 @@ function runSplash() {
 
   soundToggle.checked = !!settings.soundOn;
   musicToggle.checked = !!settings.musicOn;
-  bgSelect.value = settings.background;
-  musicSelect.value = settings.music;
-  sfxSelect.value = settings.sfxPack;
 
-  bodySelect.value = cosmetics.body;
-  headSelect.value = cosmetics.head;
+  sfxSelect.value = settings.sfxPack;
 
   suitColor.value = cosmetics.suit;
   capeColor.value = cosmetics.cape;
   maskColor.value = cosmetics.mask;
-
-  trailSelect.value = cosmetics.trail;
-  auraSelect.value = cosmetics.aura;
-  buildStyleSelect.value = cosmetics.buildStyle;
 
   coinsText.textContent = String(coins);
   renderLocalBoard();
