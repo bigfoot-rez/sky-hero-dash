@@ -1,10 +1,9 @@
 // ============================
 // SKY HERO DASH
-// v15: restore full game.js, fix overlay stuck (CSS handled in v15 style.css),
-//      bee + skeleton added, cat vs fox heads distinct, shield blocks 1 hit, glide is easier flying
+// v16: parallax upgrade + more backgrounds + shop unlockables (trails, auras, building skins, extra backgrounds)
 // ============================
 
-const APP_VERSION = "v15";
+const APP_VERSION = "v16";
 
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -24,6 +23,7 @@ const closeSettings = document.getElementById("closeSettings");
 const settingsPanel = document.getElementById("settingsPanel");
 const shopButton = document.getElementById("shopButton");
 const shopPanel = document.getElementById("shopPanel");
+const shopList = document.getElementById("shopList");
 const changeNameButton = document.getElementById("changeNameButton");
 const versionText = document.getElementById("versionText");
 
@@ -54,14 +54,12 @@ const headSelect = document.getElementById("headSelect");
 const suitColor = document.getElementById("suitColor");
 const capeColor = document.getElementById("capeColor");
 const maskColor = document.getElementById("maskColor");
+
 const trailSelect = document.getElementById("trailSelect");
+const auraSelect = document.getElementById("auraSelect");
+const buildStyleSelect = document.getElementById("buildStyleSelect");
 
 const coinsText = document.getElementById("coinsText");
-const buySpark = document.getElementById("buySpark");
-const buyNeon = document.getElementById("buyNeon");
-const buySmoke = document.getElementById("buySmoke");
-const buyConfetti = document.getElementById("buyConfetti");
-
 const localLeaderboardEl = document.getElementById("localLeaderboard");
 const toast = document.getElementById("toast");
 
@@ -84,10 +82,51 @@ const LS = {
   name: "skyhero_name_v1",
   best: "skyhero_best_v1",
   coins: "skyhero_coins_v1",
-  unlocks: "skyhero_unlocks_v2",
-  settings: "skyhero_settings_v4",
-  cosmetics: "skyhero_cosmetics_v4",
+  unlocks: "skyhero_unlocks_v16",
+  settings: "skyhero_settings_v16",
+  cosmetics: "skyhero_cosmetics_v16",
   localBoard: "skyhero_localboard_v1",
+};
+
+// ----------------------------
+// Content definitions
+// ----------------------------
+const THEME_META = {
+  city_day:   { label: "City (Day)",    locked: false },
+  city_night: { label: "City (Night)",  locked: false },
+  cloudy:     { label: "Cloudy",        locked: false },
+  rainy:      { label: "Rainy (City)",  locked: false },
+
+  sunset:     { label: "Sunset",        locked: true,  unlockKey: "bg_sunset" },
+  neon:       { label: "Neon Night",    locked: true,  unlockKey: "bg_neon" },
+  desert:     { label: "Desert",        locked: true,  unlockKey: "bg_desert" },
+  forest:     { label: "Forest",        locked: true,  unlockKey: "bg_forest" },
+  snow:       { label: "Snow",          locked: true,  unlockKey: "bg_snow" },
+};
+
+const TRAILS = {
+  spark:    { label: "Spark",    cost: 50,  unlockKey: "trail_spark" },
+  neon:     { label: "Neon",     cost: 120, unlockKey: "trail_neon" },
+  smoke:    { label: "Smoke",    cost: 80,  unlockKey: "trail_smoke" },
+  confetti: { label: "Confetti", cost: 160, unlockKey: "trail_confetti" },
+  embers:   { label: "Embers",   cost: 140, unlockKey: "trail_embers" },
+  bubbles:  { label: "Bubbles",  cost: 110, unlockKey: "trail_bubbles" },
+  stars:    { label: "Star Dust",cost: 180, unlockKey: "trail_stars" },
+  glitch:   { label: "Glitch",   cost: 200, unlockKey: "trail_glitch" },
+};
+
+const AURAS = {
+  halo:   { label: "Halo",   cost: 120, unlockKey: "aura_halo" },
+  shadow: { label: "Shadow", cost: 90,  unlockKey: "aura_shadow" },
+  pulse:  { label: "Pulse",  cost: 160, unlockKey: "aura_pulse" },
+  frost:  { label: "Frost",  cost: 150, unlockKey: "aura_frost" },
+};
+
+const BUILD_STYLES = {
+  brick: { label: "Brick", locked: false },
+  glass: { label: "Glass", locked: true, unlockKey: "build_glass", cost: 160 },
+  neon:  { label: "Neon",  locked: true, unlockKey: "build_neon",  cost: 200 },
+  stone: { label: "Stone", locked: true, unlockKey: "build_stone", cost: 140 },
 };
 
 // ----------------------------
@@ -107,15 +146,17 @@ const POWERUP_SIZE = 18;
 // Power-ups
 const SHIELD_DURATION_MS = 8000;
 const SHIELD_IFRAME_MS = 900;
-const GLIDE_DURATION_MS = 6000;
 
 // Particles
 const RAIN_COUNT = 90;
-const STAR_COUNT = 55;
+const STAR_COUNT = 65;
+const SNOW_COUNT = 70;
 let rainDrops = [];
 let stars = [];
+let snow = [];
 let previewRainDrops = [];
 let previewStars = [];
+let previewSnow = [];
 
 // ----------------------------
 // State
@@ -127,7 +168,6 @@ let speedMult = 1;
 
 let shieldUntil = 0;
 let iframesUntil = 0;
-let glideUntil = 0;
 
 // Settings + cosmetics + unlocks
 let settings = {
@@ -143,11 +183,13 @@ let cosmetics = {
   cape: "#d10000",
   mask: "#111111",
   trail: "none",
+  aura: "none",
+  buildStyle: "brick",
   body: "classic",
   head: "classic",
 };
 
-let unlocks = { spark: false, neon: false, smoke: false, confetti: false };
+let unlocks = {}; // {unlockKey:true}
 let coins = 0;
 
 // ----------------------------
@@ -167,9 +209,7 @@ function loadJSON(key, fallback) {
     return raw ? JSON.parse(raw) : fallback;
   } catch { return fallback; }
 }
-function saveJSON(key, obj) {
-  localStorage.setItem(key, JSON.stringify(obj));
-}
+function saveJSON(key, obj) { localStorage.setItem(key, JSON.stringify(obj)); }
 
 function saveAll() {
   saveJSON(LS.settings, settings);
@@ -178,13 +218,16 @@ function saveAll() {
   localStorage.setItem(LS.coins, String(coins));
 }
 
+function isUnlocked(key) { return !!unlocks[key]; }
+function unlock(key) { unlocks[key] = true; saveAll(); }
+
 function loadAll() {
   settings = { ...settings, ...loadJSON(LS.settings, settings) };
   cosmetics = { ...cosmetics, ...loadJSON(LS.cosmetics, cosmetics) };
-  unlocks = { ...unlocks, ...loadJSON(LS.unlocks, unlocks) };
+  unlocks = { ...unlocks, ...loadJSON(LS.unlocks, {}) };
   coins = Math.max(0, Number(localStorage.getItem(LS.coins) || "0"));
 
-  const bgOK = new Set(["city_day", "city_night", "cloudy", "rainy"]);
+  const bgOK = new Set(Object.keys(THEME_META));
   if (!bgOK.has(settings.background)) settings.background = "city_day";
 
   const musicOK = new Set(["none", "chill", "arcade", "night"]);
@@ -193,17 +236,17 @@ function loadAll() {
   const sfxOK = new Set(["classic", "heroic", "robot"]);
   if (!sfxOK.has(settings.sfxPack)) settings.sfxPack = "classic";
 
-  const partOK = new Set([
-    "classic","armored","speed",
-    "animal_cat","animal_dog","animal_fox",
-    "bee","skeleton",
-    "helmet","hood"
-  ]);
-  if (!partOK.has(cosmetics.body)) cosmetics.body = "classic";
-  if (!partOK.has(cosmetics.head)) cosmetics.head = "classic";
+  // clamp cosmetics
+  if (cosmetics.trail !== "none" && !isUnlocked(TRAILS[cosmetics.trail]?.unlockKey)) cosmetics.trail = "none";
+  if (cosmetics.aura !== "none" && !isUnlocked(AURAS[cosmetics.aura]?.unlockKey)) cosmetics.aura = "none";
 
-  // trail lock safety
-  if (cosmetics.trail !== "none" && !unlocks[cosmetics.trail]) cosmetics.trail = "none";
+  if (!BUILD_STYLES[cosmetics.buildStyle]) cosmetics.buildStyle = "brick";
+  const bs = BUILD_STYLES[cosmetics.buildStyle];
+  if (bs.locked && !isUnlocked(bs.unlockKey)) cosmetics.buildStyle = "brick";
+
+  // background lock safety
+  const meta = THEME_META[settings.background];
+  if (meta?.locked && meta.unlockKey && !isUnlocked(meta.unlockKey)) settings.background = "city_day";
 }
 
 function getName() { return localStorage.getItem(LS.name) || ""; }
@@ -242,9 +285,7 @@ function loadLocalBoard() {
       .map(x => ({ name: x.name.slice(0, 16), score: Math.max(0, Math.floor(x.score)) }));
   } catch { return []; }
 }
-function saveLocalBoard(board) {
-  localStorage.setItem(LS.localBoard, JSON.stringify(board));
-}
+function saveLocalBoard(board) { localStorage.setItem(LS.localBoard, JSON.stringify(board)); }
 function submitLocalScore(name, s) {
   let board = loadLocalBoard();
   board.push({ name, score: s });
@@ -386,18 +427,13 @@ function startMusicLoop({ force = false, preview = false } = {}) {
   }, stepMs);
 }
 
-function stopMusicPreview() {
-  musicPreviewActive = false;
-  stopMusic();
-}
+function stopMusicPreview() { musicPreviewActive = false; stopMusic(); }
 
 function ensureMusicState() {
   if (musicPreviewActive) return;
   if (canPlayMusicInGame()) {
     if (!musicTimer) startMusicLoop({ force: false, preview: false });
-  } else {
-    stopMusic();
-  }
+  } else stopMusic();
 }
 
 // ----------------------------
@@ -412,7 +448,13 @@ function initRain(arr, w, h) {
 function initStars(arr, w, h) {
   arr.length = 0;
   for (let i = 0; i < STAR_COUNT; i++) {
-    arr.push({ x: Math.random()*w, y: Math.random()*(h*0.65), r: 0.6+Math.random()*1.4, tw: Math.random()*Math.PI*2 });
+    arr.push({ x: Math.random()*w, y: Math.random()*(h*0.65), r: 0.6+Math.random()*1.6, tw: Math.random()*Math.PI*2 });
+  }
+}
+function initSnow(arr, w, h) {
+  arr.length = 0;
+  for (let i = 0; i < SNOW_COUNT; i++) {
+    arr.push({ x: Math.random()*w, y: Math.random()*h, vy: 1.2+Math.random()*2.0, vx: -0.4 + Math.random()*0.8, r: 0.8+Math.random()*2.2 });
   }
 }
 
@@ -461,7 +503,6 @@ function initGame() {
 
   shieldUntil = 0;
   iframesUntil = 0;
-  glideUntil = 0;
 
   scoreText.textContent = "0";
   bestText.textContent = String(best);
@@ -470,10 +511,7 @@ function initGame() {
   hideOverlayHard();
 }
 
-function reset() {
-  initGame();
-  toastMsg("Reset");
-}
+function reset() { initGame(); toastMsg("Reset"); }
 
 function startPlay() {
   if (gameOver) reset();
@@ -529,7 +567,7 @@ function endGame() {
     bestText.textContent = String(best);
   }
 
-  coins += Math.min(60, Math.floor(score * 2));
+  coins += Math.min(90, Math.floor(score * 2));
   coinsText.textContent = String(coins);
   saveAll();
 
@@ -537,7 +575,7 @@ function endGame() {
 }
 
 // ----------------------------
-// Power-ups
+// Buildings + powerups
 // ----------------------------
 function spawnBuildingPair() {
   const margin = 70;
@@ -547,35 +585,21 @@ function spawnBuildingPair() {
 
   let power = null;
   if (Math.random() < POWERUP_CHANCE) {
-    const types = ["shield", "glide"];
-    const t = types[Math.floor(Math.random() * types.length)];
-    power = { type: t, x: canvas.width + 10 + BUILDING_WIDTH/2, y: top + GAP_SIZE/2, taken: false };
+    power = { type: "shield", x: canvas.width + 10 + BUILDING_WIDTH/2, y: top + GAP_SIZE/2, taken: false };
   }
 
   buildings.push({ x: canvas.width + 10, top, passed: false, power });
 }
 
-function buildingSpeed() {
-  return BUILDING_SPEED_BASE * speedMult;
-}
-function effectiveGravity() {
-  if (now() < glideUntil) return BASE_GRAVITY * 0.35;
-  return BASE_GRAVITY;
-}
-function effectiveLift() {
-  if (now() < glideUntil) return BASE_LIFT * 1.12;
-  return BASE_LIFT;
-}
+function buildingSpeed() { return BUILDING_SPEED_BASE * speedMult; }
+function effectiveGravity() { return BASE_GRAVITY; }
+function effectiveLift() { return BASE_LIFT; }
 
 function applyPower(type) {
   if (type === "shield") {
     shieldUntil = now() + SHIELD_DURATION_MS;
     toastMsg("Shield ON (blocks 1 hit)");
-  } else {
-    glideUntil = now() + GLIDE_DURATION_MS;
-    toastMsg("Glide ON (easier flying)");
   }
-
   playSfx("power");
   coins += 5;
   coinsText.textContent = String(coins);
@@ -591,29 +615,14 @@ function heroHitBuilding(gapTop, gapBottom, bX, bRight) {
 }
 
 // ----------------------------
-// Background rendering
+// Background (PARALLAX UPGRADE)
 // ----------------------------
-function drawClouds(ctx2, f, w, h, strength=1) {
-  ctx2.globalAlpha = 0.18 * strength;
-  ctx2.fillStyle = "#ffffff";
-  for (let i = 0; i < 6; i++) {
-    const cx = (i * 120 + (f * 0.5)) % (w + 160) - 80;
-    const cy = 28 + (i % 3) * 26;
-    ctx2.beginPath();
-    ctx2.arc(cx, cy, 16, 0, Math.PI*2);
-    ctx2.arc(cx + 18, cy + 5, 13, 0, Math.PI*2);
-    ctx2.arc(cx - 18, cy + 6, 12, 0, Math.PI*2);
-    ctx2.fill();
-  }
-  ctx2.globalAlpha = 1;
-}
-
 function drawStars(ctx2, f, starArr) {
   ctx2.save();
   ctx2.fillStyle = "#fff";
   for (const s of starArr) {
     const tw = 0.55 + 0.45 * Math.sin(f * 0.03 + s.tw);
-    ctx2.globalAlpha = 0.25 + 0.55 * tw;
+    ctx2.globalAlpha = 0.18 + 0.62 * tw;
     ctx2.beginPath();
     ctx2.arc(s.x, s.y, s.r, 0, Math.PI*2);
     ctx2.fill();
@@ -641,69 +650,175 @@ function drawRain(ctx2, dropArr, w, h) {
   ctx2.globalAlpha = 1;
 }
 
-function skylineColors(bg) {
-  if (bg === "city_night") return { c1:"#0d1433", c2:"#121a44", c3:"#1a2358" };
-  if (bg === "rainy")      return { c1:"#2f3a4a", c2:"#3b475b", c3:"#4a5870" };
-  if (bg === "cloudy")     return { c1:"#3a3f55", c2:"#4a5070", c3:"#59628a" };
-  return { c1:"#2b2b4f", c2:"#3a3a67", c3:"#4b4b85" };
-}
-
-function drawSkylineLayer(ctx2, f, w, color, baseY, alpha, speed) {
-  ctx2.globalAlpha = alpha;
-  ctx2.fillStyle = color;
-  const offset = -((f * speed) % 140);
-  for (let x = offset; x < w + 140; x += 140) {
-    const bw = 90;
-    const bh = 50 + ((x + f) % 45);
-    ctx2.fillRect(x, baseY - bh, bw, bh);
+function drawSnow(ctx2, arr, w, h) {
+  ctx2.save();
+  ctx2.fillStyle = "rgba(255,255,255,0.9)";
+  for (const s of arr) {
+    ctx2.globalAlpha = 0.35 + 0.25 * Math.sin((frame*0.03) + s.x*0.02);
+    ctx2.beginPath();
+    ctx2.arc(s.x, s.y, s.r, 0, Math.PI*2);
+    ctx2.fill();
+    s.y += s.vy;
+    s.x += s.vx + Math.sin(frame*0.01 + s.y*0.02) * 0.25;
+    if (s.y > h + 10) { s.y = -10; s.x = Math.random() * w; }
+    if (s.x < -20) s.x = w + 20;
+    if (s.x > w + 20) s.x = -20;
   }
+  ctx2.restore();
   ctx2.globalAlpha = 1;
 }
 
-function drawBackground(ctx2, f, w, h, bg, starArr, rainArr) {
-  if (bg === "city_night") {
-    const sky = ctx2.createLinearGradient(0,0,0,h);
-    sky.addColorStop(0,"#06122b");
-    sky.addColorStop(1,"#1b1f3a");
-    ctx2.fillStyle = sky;
-    ctx2.fillRect(0,0,w,h);
-    drawStars(ctx2, f, starArr);
-    drawClouds(ctx2, f, w, h, 0.5);
-  } else if (bg === "cloudy") {
-    const sky = ctx2.createLinearGradient(0,0,0,h);
-    sky.addColorStop(0,"#9fb7c9");
-    sky.addColorStop(1,"#d8e2ea");
-    ctx2.fillStyle = sky;
-    ctx2.fillRect(0,0,w,h);
-    drawClouds(ctx2, f, w, h, 1.3);
-  } else if (bg === "rainy") {
-    const sky = ctx2.createLinearGradient(0,0,0,h);
-    sky.addColorStop(0,"#566a7a");
-    sky.addColorStop(1,"#a7b7c3");
-    ctx2.fillStyle = sky;
-    ctx2.fillRect(0,0,w,h);
-    drawClouds(ctx2, f, w, h, 1.1);
-  } else {
-    const sky = ctx2.createLinearGradient(0,0,0,h);
-    sky.addColorStop(0,"#87CEEB");
-    sky.addColorStop(1,"#cdeffd");
-    ctx2.fillStyle = sky;
-    ctx2.fillRect(0,0,w,h);
-    drawClouds(ctx2, f, w, h, 0.8);
+function drawCloudBand(ctx2, f, w, y, strength=1) {
+  ctx2.save();
+  ctx2.globalAlpha = 0.16 * strength;
+  ctx2.fillStyle = "#ffffff";
+  const speed = 0.22 * strength;
+  for (let i = 0; i < 8; i++) {
+    const cx = (i * 120 + (f * speed)) % (w + 180) - 90;
+    const cy = y + (i % 3) * 10;
+    ctx2.beginPath();
+    ctx2.arc(cx, cy, 18, 0, Math.PI*2);
+    ctx2.arc(cx + 22, cy + 6, 14, 0, Math.PI*2);
+    ctx2.arc(cx - 22, cy + 7, 13, 0, Math.PI*2);
+    ctx2.fill();
+  }
+  ctx2.restore();
+}
+
+function themeSkyGradient(ctx2, bg, h) {
+  const g = ctx2.createLinearGradient(0,0,0,h);
+  if (bg === "city_night") { g.addColorStop(0,"#06122b"); g.addColorStop(1,"#1b1f3a"); return g; }
+  if (bg === "rainy")      { g.addColorStop(0,"#4d6372"); g.addColorStop(1,"#a7b7c3"); return g; }
+  if (bg === "cloudy")     { g.addColorStop(0,"#9fb7c9"); g.addColorStop(1,"#d8e2ea"); return g; }
+  if (bg === "sunset")     { g.addColorStop(0,"#ffb36b"); g.addColorStop(1,"#7b5cff"); return g; }
+  if (bg === "neon")       { g.addColorStop(0,"#050215"); g.addColorStop(1,"#1a0b33"); return g; }
+  if (bg === "desert")     { g.addColorStop(0,"#ffd59e"); g.addColorStop(1,"#ff9b6a"); return g; }
+  if (bg === "forest")     { g.addColorStop(0,"#92d6c7"); g.addColorStop(1,"#2c6b52"); return g; }
+  if (bg === "snow")       { g.addColorStop(0,"#cfe8ff"); g.addColorStop(1,"#eef7ff"); return g; }
+  // city_day
+  g.addColorStop(0,"#87CEEB"); g.addColorStop(1,"#cdeffd"); return g;
+}
+
+function skylinePalette(bg) {
+  if (bg === "city_night") return ["#0d1433","#121a44","#1a2358","#232c6f"];
+  if (bg === "neon")       return ["#0a0220","#1b0838","#240a4a","#1d2a6e"];
+  if (bg === "sunset")     return ["#3a1f5a","#5c2a79","#7a2b6f","#913560"];
+  if (bg === "rainy")      return ["#2f3a4a","#3b475b","#4a5870","#54657d"];
+  if (bg === "cloudy")     return ["#3a3f55","#4a5070","#59628a","#6d79a2"];
+  if (bg === "desert")     return ["#6b3a1f","#8a4a2a","#a85e34","#c1783f"];
+  if (bg === "forest")     return ["#103d2f","#165342","#1f6b55","#2b8668"];
+  if (bg === "snow")       return ["#3d4a63","#4c5c7a","#5e7396","#7c93b8"];
+  // city_day
+  return ["#2b2b4f","#3a3a67","#4b4b85","#6060a5"];
+}
+
+function drawLayerBlocks(ctx2, f, w, baseY, color, alpha, speed, tallBias=0.5, windowAlpha=0.0, windowColor="#ffeaa0") {
+  ctx2.save();
+  ctx2.globalAlpha = alpha;
+  ctx2.fillStyle = color;
+
+  const offset = -((f * speed) % 160);
+  for (let x = offset; x < w + 200; x += 160) {
+    const bw = 100;
+    const rnd = (Math.sin((x + f) * 0.02) * 0.5 + 0.5);
+    const bh = 40 + rnd * 95 * tallBias;
+    ctx2.fillRect(x, baseY - bh, bw, bh);
+
+    if (windowAlpha > 0) {
+      ctx2.globalAlpha = alpha * windowAlpha;
+      ctx2.fillStyle = windowColor;
+      for (let wy = baseY - bh + 10; wy < baseY - 12; wy += 28) {
+        for (let wx = x + 10; wx < x + bw - 12; wx += 22) {
+          ctx2.fillRect(wx, wy, 8, 12);
+        }
+      }
+      ctx2.globalAlpha = alpha;
+      ctx2.fillStyle = color;
+    }
   }
 
-  const { c1, c2, c3 } = skylineColors(bg);
-  drawSkylineLayer(ctx2, f, w, c1, h - 10, 0.85, 0.25);
-  drawSkylineLayer(ctx2, f, w, c2, h - 28, 0.75, 0.45);
-  drawSkylineLayer(ctx2, f, w, c3, h - 46, 0.65, 0.70);
+  ctx2.restore();
+  ctx2.globalAlpha = 1;
+}
+
+function drawGround(ctx2, bg, f, w, h) {
+  ctx2.save();
+  const g = ctx2.createLinearGradient(0, h-80, 0, h);
+  if (bg === "desert") { g.addColorStop(0,"#e7b36d"); g.addColorStop(1,"#c98b45"); }
+  else if (bg === "forest") { g.addColorStop(0,"#1e5b44"); g.addColorStop(1,"#144233"); }
+  else if (bg === "snow") { g.addColorStop(0,"#eaf3ff"); g.addColorStop(1,"#cfe1f7"); }
+  else if (bg === "neon") { g.addColorStop(0,"#0b0620"); g.addColorStop(1,"#0a0220"); }
+  else if (bg === "city_night") { g.addColorStop(0,"#0f1431"); g.addColorStop(1,"#0a0f26"); }
+  else { g.addColorStop(0,"#2c3e50"); g.addColorStop(1,"#1b2a35"); }
+
+  ctx2.fillStyle = g;
+  ctx2.fillRect(0, h-70, w, 70);
+
+  // moving detail line
+  ctx2.globalAlpha = 0.25;
+  ctx2.fillStyle = "#fff";
+  const speed = 1.6;
+  for (let x = -((f*speed)%60); x < w+60; x += 60) ctx2.fillRect(x, h-36, 32, 2);
+  ctx2.globalAlpha = 1;
+  ctx2.restore();
+}
+
+function drawBackground(ctx2, f, w, h, bg, starArr, rainArr, snowArr) {
+  ctx2.fillStyle = themeSkyGradient(ctx2, bg, h);
+  ctx2.fillRect(0,0,w,h);
+
+  if (bg === "city_night" || bg === "neon") drawStars(ctx2, f, starArr);
+  if (bg === "sunset") {
+    ctx2.save();
+    ctx2.globalAlpha = 0.35;
+    ctx2.fillStyle = "#fff";
+    ctx2.beginPath();
+    ctx2.arc(w*0.82, h*0.22, 26, 0, Math.PI*2);
+    ctx2.fill();
+    ctx2.restore();
+  }
+
+  if (bg === "cloudy" || bg === "rainy") {
+    drawCloudBand(ctx2, f, w, 40, 1.25);
+    drawCloudBand(ctx2, f, w, 90, 1.0);
+  } else {
+    drawCloudBand(ctx2, f, w, 50, 0.75);
+  }
+
+  const pal = skylinePalette(bg);
+
+  // 4 parallax layers (far -> near)
+  drawLayerBlocks(ctx2, f, w, h-120, pal[0], 0.55, 0.14, 0.65, 0.0);
+  drawLayerBlocks(ctx2, f, w, h-100, pal[1], 0.60, 0.22, 0.75, bg.includes("night")||bg==="neon" ? 0.65 : 0.0);
+  drawLayerBlocks(ctx2, f, w, h-78,  pal[2], 0.70, 0.34, 0.9,  bg.includes("night")||bg==="neon" ? 0.75 : 0.0);
+  drawLayerBlocks(ctx2, f, w, h-58,  pal[3], 0.80, 0.52, 1.0,  bg.includes("night")||bg==="neon" ? 0.85 : 0.0);
+
+  drawGround(ctx2, bg, f, w, h);
 
   if (bg === "rainy") drawRain(ctx2, rainArr, w, h);
+  if (bg === "snow") drawSnow(ctx2, snowArr, w, h);
+
+  if (bg === "neon") {
+    ctx2.save();
+    ctx2.globalAlpha = 0.12;
+    ctx2.strokeStyle = "#00ffe0";
+    ctx2.lineWidth = 2;
+    for (let i = 0; i < 6; i++) {
+      const y = 60 + i * 70 + Math.sin((f+i)*0.05)*6;
+      ctx2.beginPath();
+      ctx2.moveTo(0, y);
+      ctx2.lineTo(w, y);
+      ctx2.stroke();
+    }
+    ctx2.restore();
+    ctx2.globalAlpha = 1;
+  }
 }
 
 // ----------------------------
-// Buildings + powerups visuals
+// Buildings visuals
 // ----------------------------
-function drawBuilding(x, y, width, height) {
+function drawBrickBuilding(x, y, width, height) {
   ctx.fillStyle = "#7a0a0a";
   ctx.fillRect(x, y, width, height);
 
@@ -716,61 +831,111 @@ function drawBuilding(x, y, width, height) {
   ctx.lineWidth = 1;
 
   for (let row = y; row < y + height; row += 14) {
-    ctx.beginPath();
-    ctx.moveTo(x, row);
-    ctx.lineTo(x + width, row);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, row); ctx.lineTo(x + width, row); ctx.stroke();
   }
-
   for (let row = 0; row < height; row += 28) {
     const offset = (row / 28) % 2 === 0 ? 0 : 10;
     for (let col = x + offset; col < x + width; col += 20) {
-      ctx.beginPath();
-      ctx.moveTo(col, y + row);
-      ctx.lineTo(col, y + row + 14);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(col, y + row); ctx.lineTo(col, y + row + 14); ctx.stroke();
     }
   }
 
-  const nightBoost = settings.background === "city_night" ? 1.0 : 0.0;
-  ctx.fillStyle = `rgba(255, 234, 120, ${0.55 + nightBoost * 0.35})`;
-
-  for (let wy = y + 10; wy < y + height - 10; wy += 46) {
-    for (let wx = x + 10; wx < x + width - 12; wx += 22) {
-      ctx.fillRect(wx, wy, 8, 12);
+  const isNight = (settings.background === "city_night" || settings.background === "neon");
+  if (isNight) {
+    ctx.fillStyle = "rgba(255, 234, 120, 0.7)";
+    for (let wy = y + 10; wy < y + height - 10; wy += 46) {
+      for (let wx = x + 10; wx < x + width - 12; wx += 22) ctx.fillRect(wx, wy, 8, 12);
     }
   }
+}
+
+function drawGlassBuilding(x, y, width, height) {
+  const g = ctx.createLinearGradient(x, y, x+width, y);
+  g.addColorStop(0, "rgba(120,210,255,0.55)");
+  g.addColorStop(1, "rgba(30,110,170,0.55)");
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, width, height);
+
+  ctx.globalAlpha = 0.2;
+  ctx.fillStyle = "#fff";
+  for (let i = 0; i < 10; i++) {
+    const yy = y + (i*22) + (frame%22);
+    ctx.fillRect(x+8, yy, width-16, 2);
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.strokeRect(x+1, y+1, width-2, height-2);
+}
+
+function drawNeonBuilding(x, y, width, height) {
+  ctx.fillStyle = "#0d0b1a";
+  ctx.fillRect(x, y, width, height);
+
+  ctx.globalAlpha = 0.9;
+  ctx.strokeStyle = "rgba(0,255,230,0.9)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x+1, y+1, width-2, height-2);
+  ctx.globalAlpha = 1;
+
+  ctx.globalAlpha = 0.25;
+  for (let i=0;i<8;i++){
+    ctx.fillStyle = `hsla(${(frame*4+i*40)%360} 90% 60% / 0.6)`;
+    ctx.fillRect(x+10, y+10+i*28, width-20, 3);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawStoneBuilding(x, y, width, height) {
+  ctx.fillStyle = "#4a4a4a";
+  ctx.fillRect(x, y, width, height);
+
+  ctx.globalAlpha = 0.2;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(x+width-10, y, 10, height);
+  ctx.globalAlpha = 1;
+
+  ctx.strokeStyle = "rgba(255,255,255,0.12)";
+  ctx.lineWidth = 1;
+  for (let row = y; row < y+height; row += 18) {
+    ctx.beginPath(); ctx.moveTo(x, row); ctx.lineTo(x+width, row); ctx.stroke();
+  }
+  for (let col = x; col < x+width; col += 18) {
+    ctx.beginPath(); ctx.moveTo(col, y); ctx.lineTo(col, y+height); ctx.stroke();
+  }
+}
+
+function drawBuilding(x, y, width, height) {
+  const style = cosmetics.buildStyle;
+  if (style === "glass") return drawGlassBuilding(x,y,width,height);
+  if (style === "neon") return drawNeonBuilding(x,y,width,height);
+  if (style === "stone") return drawStoneBuilding(x,y,width,height);
+  return drawBrickBuilding(x,y,width,height);
 }
 
 function drawPowerup(p) {
   if (!p || p.taken) return;
   ctx.save();
   ctx.translate(p.x, p.y);
-
-  ctx.fillStyle = (p.type === "shield")
-    ? "rgba(0, 170, 255, 0.92)"
-    : "rgba(255, 230, 90, 0.92)";
-
+  ctx.fillStyle = "rgba(0, 170, 255, 0.92)";
   ctx.beginPath();
   ctx.arc(0, 0, POWERUP_SIZE, 0, Math.PI*2);
   ctx.fill();
-
   ctx.fillStyle = "#000";
   ctx.font = "14px Arial";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(p.type === "shield" ? "S" : "G", 0, 1);
-
+  ctx.fillText("S", 0, 1);
   ctx.restore();
 }
 
 // ----------------------------
-// Hero visuals
+// Hero visuals (same as v15 + new trails/auras)
 // ----------------------------
 function drawTrail(ctx2, f, hx, hy, trail) {
-  if (trail === "none") return;
   const x = hx - 6;
   const y = hy + 18;
+  if (trail === "none") return;
 
   if (trail === "spark") {
     ctx2.globalAlpha = 0.65;
@@ -821,8 +986,123 @@ function drawTrail(ctx2, f, hx, hy, trail) {
     ctx2.globalAlpha = 1;
     return;
   }
+
+  if (trail === "embers") {
+    ctx2.globalAlpha = 0.70;
+    for (let i = 0; i < 7; i++) {
+      const t = (f + i*7);
+      ctx2.fillStyle = `rgba(255, ${120 + (t%80)}, 40, ${0.10 + i*0.05})`;
+      ctx2.beginPath();
+      ctx2.arc(x - i*9, y + Math.sin(t*0.18)*6, 2.6 + (i%3)*0.4, 0, Math.PI*2);
+      ctx2.fill();
+    }
+    ctx2.globalAlpha = 1;
+    return;
+  }
+
+  if (trail === "bubbles") {
+    ctx2.globalAlpha = 0.55;
+    for (let i = 0; i < 7; i++) {
+      const t = (f + i*11);
+      ctx2.strokeStyle = `rgba(160, 230, 255, ${0.12 + i*0.05})`;
+      ctx2.lineWidth = 1.5;
+      ctx2.beginPath();
+      ctx2.arc(x - i*10, y + Math.sin(t*0.12)*10, 4 + (i%3)*1.2, 0, Math.PI*2);
+      ctx2.stroke();
+    }
+    ctx2.globalAlpha = 1;
+    return;
+  }
+
+  if (trail === "stars") {
+    ctx2.globalAlpha = 0.75;
+    for (let i = 0; i < 8; i++) {
+      const t = (f*0.2 + i);
+      const px = x - i*9;
+      const py = y + Math.sin(t*2.2)*7;
+      ctx2.fillStyle = `rgba(255,255,255,${0.15 + i*0.07})`;
+      ctx2.fillRect(px, py, 2, 2);
+      ctx2.fillRect(px+3, py+1, 1, 1);
+    }
+    ctx2.globalAlpha = 1;
+    return;
+  }
+
+  if (trail === "glitch") {
+    ctx2.globalAlpha = 0.65;
+    for (let i = 0; i < 8; i++) {
+      const ox = x - i*8 - (frame%3);
+      const oy = y + ((i%2===0)? -6:6) + Math.sin((f+i)*0.4)*2;
+      ctx2.fillStyle = `hsla(${(f*8+i*45)%360} 95% 60% / ${0.10 + i*0.06})`;
+      ctx2.fillRect(ox, oy, 8, 2);
+    }
+    ctx2.globalAlpha = 1;
+    return;
+  }
 }
 
+function drawAura(ctx2, f, hx, hy, aura) {
+  if (aura === "none") return;
+  const cx = hx + 17;
+  const cy = hy + 17;
+
+  if (aura === "halo") {
+    ctx2.save();
+    ctx2.globalAlpha = 0.35;
+    ctx2.strokeStyle = "rgba(255,240,160,0.9)";
+    ctx2.lineWidth = 4;
+    ctx2.beginPath();
+    ctx2.arc(cx, cy-16, 14, 0, Math.PI*2);
+    ctx2.stroke();
+    ctx2.restore();
+    return;
+  }
+
+  if (aura === "shadow") {
+    ctx2.save();
+    ctx2.globalAlpha = 0.25;
+    ctx2.fillStyle = "rgba(0,0,0,0.85)";
+    ctx2.beginPath();
+    ctx2.ellipse(cx-4, cy+20, 18, 8, 0, 0, Math.PI*2);
+    ctx2.fill();
+    ctx2.restore();
+    return;
+  }
+
+  if (aura === "pulse") {
+    ctx2.save();
+    const r = 22 + 4*Math.sin(f*0.12);
+    ctx2.globalAlpha = 0.18;
+    ctx2.strokeStyle = "rgba(0,255,230,0.95)";
+    ctx2.lineWidth = 3;
+    ctx2.beginPath();
+    ctx2.arc(cx, cy, r, 0, Math.PI*2);
+    ctx2.stroke();
+    ctx2.restore();
+    return;
+  }
+
+  if (aura === "frost") {
+    ctx2.save();
+    ctx2.globalAlpha = 0.22;
+    ctx2.strokeStyle = "rgba(210,245,255,0.95)";
+    ctx2.lineWidth = 2.5;
+    for (let i=0;i<7;i++){
+      const ang = (i/7)*Math.PI*2 + (f*0.01);
+      const x1 = cx + Math.cos(ang)*12;
+      const y1 = cy + Math.sin(ang)*12;
+      const x2 = cx + Math.cos(ang)*26;
+      const y2 = cy + Math.sin(ang)*26;
+      ctx2.beginPath();
+      ctx2.moveTo(x1,y1);
+      ctx2.lineTo(x2,y2);
+      ctx2.stroke();
+    }
+    ctx2.restore();
+  }
+}
+
+// --- animal heads (same as v15) ---
 function drawAnimalHead(ctx2, hx, hy, kind, furColor, accentColor) {
   ctx2.fillStyle = furColor;
   ctx2.beginPath();
@@ -830,7 +1110,6 @@ function drawAnimalHead(ctx2, hx, hy, kind, furColor, accentColor) {
   ctx2.fill();
 
   if (kind === "animal_cat") {
-    // cat: sharp ears + whiskers + tiny triangle nose
     ctx2.beginPath();
     ctx2.moveTo(hx + 10, hy + 2);
     ctx2.lineTo(hx + 6, hy - 9);
@@ -871,7 +1150,6 @@ function drawAnimalHead(ctx2, hx, hy, kind, furColor, accentColor) {
   }
 
   if (kind === "animal_dog") {
-    // dog: floppy ears + snout
     ctx2.globalAlpha = 0.9;
     ctx2.beginPath();
     ctx2.ellipse(hx + 7, hy + 10, 5, 9, 0.35, 0, Math.PI*2);
@@ -893,7 +1171,6 @@ function drawAnimalHead(ctx2, hx, hy, kind, furColor, accentColor) {
   }
 
   if (kind === "animal_fox") {
-    // fox: taller ears + white cheeks + longer snout
     ctx2.beginPath();
     ctx2.moveTo(hx + 10, hy + 2);
     ctx2.lineTo(hx + 4, hy - 12);
@@ -927,7 +1204,6 @@ function drawAnimalHead(ctx2, hx, hy, kind, furColor, accentColor) {
     ctx2.fill();
   }
 
-  // eyes
   ctx2.fillStyle = "#fff";
   ctx2.fillRect(hx + 11, hy + 7, 5, 2);
   ctx2.fillRect(hx + 20, hy + 7, 5, 2);
@@ -979,7 +1255,10 @@ function drawSkeletonHead(ctx2, hx, hy) {
 }
 
 function drawHeroVariant(ctx2, f, hx, hy, opts) {
-  const { suit, cape, mask, body, head, trail, shielded, iframes } = opts;
+  const { suit, cape, mask, body, head, trail, aura, shielded, iframes } = opts;
+
+  // aura behind everything
+  drawAura(ctx2, f, hx, hy, aura);
 
   if (shielded) {
     ctx2.globalAlpha = 0.22;
@@ -1051,28 +1330,6 @@ function drawHeroVariant(ctx2, f, hx, hy, opts) {
     ctx2.beginPath();
     ctx2.ellipse(hx + 17, hy + 22, 15.5, 11.5, 0, 0, Math.PI*2);
     ctx2.fill();
-
-    if (body === "animal_cat") {
-      ctx2.globalAlpha = 0.7;
-      ctx2.beginPath();
-      ctx2.ellipse(hx + 2, hy + 23, 6, 3, -0.6, 0, Math.PI*2);
-      ctx2.fill();
-      ctx2.globalAlpha = 1;
-    } else if (body === "animal_dog") {
-      ctx2.globalAlpha = 0.25;
-      ctx2.fillStyle = "#000";
-      ctx2.beginPath();
-      ctx2.ellipse(hx + 22, hy + 22, 5, 4, 0.2, 0, Math.PI*2);
-      ctx2.fill();
-      ctx2.globalAlpha = 1;
-    } else {
-      ctx2.globalAlpha = 0.7;
-      ctx2.fillStyle = "rgba(255,255,255,0.7)";
-      ctx2.beginPath();
-      ctx2.ellipse(hx + 3, hy + 24, 6, 3, -0.8, 0, Math.PI*2);
-      ctx2.fill();
-      ctx2.globalAlpha = 1;
-    }
   } else if (body === "armored") {
     ctx2.fillStyle = suit;
     ctx2.fillRect(hx, hy + 10, 34, 24);
@@ -1159,6 +1416,7 @@ function drawHero() {
     body: cosmetics.body,
     head: cosmetics.head,
     trail: cosmetics.trail,
+    aura: cosmetics.aura,
     shielded: now() < shieldUntil,
     iframes: now() < iframesUntil,
   });
@@ -1168,11 +1426,7 @@ function drawHero() {
 // Update + draw loop
 // ----------------------------
 function update() {
-  if (!paused && !gameOver && !overlay.classList.contains("hidden")) {
-    // extra safety: if overlay shows while not paused/gameover, hide it
-    hideOverlayHard();
-  }
-
+  if (!paused && !gameOver && !overlay.classList.contains("hidden")) hideOverlayHard();
   if (!started || gameOver || paused) return;
 
   hero.vy += effectiveGravity();
@@ -1238,7 +1492,7 @@ function update() {
 
 function draw() {
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawBackground(ctx, frame, canvas.width, canvas.height, settings.background, stars, rainDrops);
+  drawBackground(ctx, frame, canvas.width, canvas.height, settings.background, stars, rainDrops, snow);
 
   for (const b of buildings) {
     drawBuilding(b.x, 0, BUILDING_WIDTH, b.top);
@@ -1254,7 +1508,6 @@ function draw() {
   ctx.font = "12px Arial";
   const buffs = [
     now() < shieldUntil ? "Shield" : "",
-    now() < glideUntil ? "Glide" : "",
     now() < iframesUntil ? "Safe" : ""
   ].filter(Boolean).join(" • ");
   if (buffs) ctx.fillText(buffs, 12, 18);
@@ -1270,12 +1523,11 @@ function draw() {
 
 function drawPreview() {
   if (!pctx || !previewCanvas) return;
-  drawBackground(pctx, frame, previewCanvas.width, previewCanvas.height, settings.background, previewStars, previewRainDrops);
+  drawBackground(pctx, frame, previewCanvas.width, previewCanvas.height, settings.background, previewStars, previewRainDrops, previewSnow);
 }
 
 function drawHeroPreview() {
   if (!hctx || !heroPreviewCanvas) return;
-
   const w = heroPreviewCanvas.width;
   const h = heroPreviewCanvas.height;
   hctx.clearRect(0,0,w,h);
@@ -1296,6 +1548,7 @@ function drawHeroPreview() {
     body: cosmetics.body,
     head: cosmetics.head,
     trail: cosmetics.trail,
+    aura: cosmetics.aura,
     shielded: false,
     iframes: false,
   });
@@ -1320,7 +1573,6 @@ canvas.addEventListener("pointerdown", (e) => {
   e.preventDefault();
   ensureAudio();
 
-  // If overlay is showing while not gameOver, a tap clears it (extra safety)
   if (!overlay.classList.contains("hidden") && !gameOver) {
     paused = false;
     hideOverlayHard();
@@ -1328,11 +1580,7 @@ canvas.addEventListener("pointerdown", (e) => {
     return;
   }
 
-  if (gameOver) {
-    reset();
-    startPlay();
-    return;
-  }
+  if (gameOver) { reset(); startPlay(); return; }
 
   if (menu.classList.contains("hidden") && !paused) {
     hero.vy = effectiveLift();
@@ -1341,29 +1589,104 @@ canvas.addEventListener("pointerdown", (e) => {
 }, { passive: false });
 
 document.addEventListener("keydown", (e) => {
+  if (e.code === "Space") {
+    e.preventDefault();
+    ensureAudio();
+    if (gameOver) { reset(); startPlay(); return; }
+    if (menu.classList.contains("hidden") && !paused) {
+      hero.vy = effectiveLift();
+      playSfx("flap");
+    }
+  }
   if (e.code === "Escape") {
     if (!overlay.classList.contains("hidden") && !gameOver) {
       paused = false;
       hideOverlayHard();
       ensureMusicState();
     }
-    return;
-  }
-  if (e.code !== "Space") return;
-  e.preventDefault();
-  ensureAudio();
-
-  if (gameOver) {
-    reset();
-    startPlay();
-    return;
-  }
-
-  if (menu.classList.contains("hidden") && !paused) {
-    hero.vy = effectiveLift();
-    playSfx("flap");
   }
 });
+
+// ----------------------------
+// Shop builder
+// ----------------------------
+function addShopButton(label, cost, unlockKey, afterBuy) {
+  const b = document.createElement("button");
+  b.className = "btn small";
+  const owned = isUnlocked(unlockKey);
+  b.textContent = owned ? `Owned: ${label}` : `Buy ${label} (${cost})`;
+
+  if (owned) b.classList.add("secondary");
+
+  b.addEventListener("click", () => {
+    if (isUnlocked(unlockKey)) return toastMsg("Already unlocked.");
+    if (coins < cost) return toastMsg(`Need ${cost} coins.`);
+    coins -= cost;
+    coinsText.textContent = String(coins);
+    unlock(unlockKey);
+    toastMsg("Unlocked!");
+    b.textContent = `Owned: ${label}`;
+    b.classList.add("secondary");
+    afterBuy?.();
+    syncLocksToUI();
+  });
+
+  shopList.appendChild(b);
+}
+
+function rebuildShop() {
+  shopList.innerHTML = "";
+
+  // Trails
+  addShopButton("Spark Trail", TRAILS.spark.cost, TRAILS.spark.unlockKey);
+  addShopButton("Neon Trail", TRAILS.neon.cost, TRAILS.neon.unlockKey);
+  addShopButton("Smoke Trail", TRAILS.smoke.cost, TRAILS.smoke.unlockKey);
+  addShopButton("Confetti Trail", TRAILS.confetti.cost, TRAILS.confetti.unlockKey);
+  addShopButton("Embers Trail", TRAILS.embers.cost, TRAILS.embers.unlockKey);
+  addShopButton("Bubbles Trail", TRAILS.bubbles.cost, TRAILS.bubbles.unlockKey);
+  addShopButton("Star Dust Trail", TRAILS.stars.cost, TRAILS.stars.unlockKey);
+  addShopButton("Glitch Trail", TRAILS.glitch.cost, TRAILS.glitch.unlockKey);
+
+  // Auras
+  addShopButton("Halo Aura", AURAS.halo.cost, AURAS.halo.unlockKey);
+  addShopButton("Shadow Aura", AURAS.shadow.cost, AURAS.shadow.unlockKey);
+  addShopButton("Pulse Aura", AURAS.pulse.cost, AURAS.pulse.unlockKey);
+  addShopButton("Frost Aura", AURAS.frost.cost, AURAS.frost.unlockKey);
+
+  // Building styles
+  addShopButton("Glass Buildings", BUILD_STYLES.glass.cost, BUILD_STYLES.glass.unlockKey);
+  addShopButton("Neon Buildings", BUILD_STYLES.neon.cost, BUILD_STYLES.neon.unlockKey);
+  addShopButton("Stone Buildings", BUILD_STYLES.stone.cost, BUILD_STYLES.stone.unlockKey);
+
+  // Backgrounds
+  addShopButton("Sunset Background", 150, THEME_META.sunset.unlockKey);
+  addShopButton("Neon Night Background", 180, THEME_META.neon.unlockKey);
+  addShopButton("Desert Background", 140, THEME_META.desert.unlockKey);
+  addShopButton("Forest Background", 140, THEME_META.forest.unlockKey);
+  addShopButton("Snow Background", 160, THEME_META.snow.unlockKey);
+}
+
+function syncLocksToUI() {
+  // Background select: if locked, force fallback
+  const meta = THEME_META[settings.background];
+  if (meta?.locked && meta.unlockKey && !isUnlocked(meta.unlockKey)) settings.background = "city_day";
+  bgSelect.value = settings.background;
+
+  // trails
+  if (cosmetics.trail !== "none" && !isUnlocked(TRAILS[cosmetics.trail]?.unlockKey)) cosmetics.trail = "none";
+  trailSelect.value = cosmetics.trail;
+
+  // aura
+  if (cosmetics.aura !== "none" && !isUnlocked(AURAS[cosmetics.aura]?.unlockKey)) cosmetics.aura = "none";
+  auraSelect.value = cosmetics.aura;
+
+  // buildings
+  const bs = BUILD_STYLES[cosmetics.buildStyle];
+  if (bs?.locked && !isUnlocked(bs.unlockKey)) cosmetics.buildStyle = "brick";
+  buildStyleSelect.value = cosmetics.buildStyle;
+
+  saveAll();
+}
 
 // ----------------------------
 // UI wiring
@@ -1428,9 +1751,16 @@ musicToggle.addEventListener("change", () => {
 });
 
 bgSelect.addEventListener("change", () => {
-  settings.background = bgSelect.value;
+  const chosen = bgSelect.value;
+  const meta = THEME_META[chosen];
+  if (meta?.locked && meta.unlockKey && !isUnlocked(meta.unlockKey)) {
+    toastMsg("That background is locked (buy it in Shop).");
+    bgSelect.value = settings.background;
+    return;
+  }
+  settings.background = chosen;
   saveAll();
-  toastMsg(`Background: ${bgSelect.options[bgSelect.selectedIndex].text}`);
+  toastMsg(`Background: ${THEME_META[chosen]?.label || chosen}`);
 });
 
 musicSelect.addEventListener("change", () => {
@@ -1476,30 +1806,46 @@ maskColor.addEventListener("input", () => { cosmetics.mask = maskColor.value; sa
 
 trailSelect.addEventListener("change", () => {
   const v = trailSelect.value;
-  if (v !== "none" && !unlocks[v]) {
-    toastMsg("That trail is locked. Buy it in Shop.");
-    trailSelect.value = "none";
-    return;
+  if (v !== "none") {
+    const k = TRAILS[v]?.unlockKey;
+    if (k && !isUnlocked(k)) {
+      toastMsg("That trail is locked. Buy it in Shop.");
+      trailSelect.value = cosmetics.trail;
+      return;
+    }
   }
   cosmetics.trail = v;
   saveAll();
   toastMsg("Trail updated");
 });
 
-// Shop
-function buy(item, cost) {
-  if (unlocks[item]) return toastMsg("Already unlocked.");
-  if (coins < cost) return toastMsg(`Need ${cost} coins.`);
-  coins -= cost;
-  unlocks[item] = true;
-  coinsText.textContent = String(coins);
+auraSelect.addEventListener("change", () => {
+  const v = auraSelect.value;
+  if (v !== "none") {
+    const k = AURAS[v]?.unlockKey;
+    if (k && !isUnlocked(k)) {
+      toastMsg("That aura is locked. Buy it in Shop.");
+      auraSelect.value = cosmetics.aura;
+      return;
+    }
+  }
+  cosmetics.aura = v;
   saveAll();
-  toastMsg("Unlocked!");
-}
-buySpark.addEventListener("click", () => buy("spark", 50));
-buyNeon.addEventListener("click", () => buy("neon", 120));
-buySmoke.addEventListener("click", () => buy("smoke", 80));
-buyConfetti.addEventListener("click", () => buy("confetti", 160));
+  toastMsg("Aura updated");
+});
+
+buildStyleSelect.addEventListener("change", () => {
+  const v = buildStyleSelect.value;
+  const meta = BUILD_STYLES[v];
+  if (meta?.locked && meta.unlockKey && !isUnlocked(meta.unlockKey)) {
+    toastMsg("That building style is locked. Buy it in Shop.");
+    buildStyleSelect.value = cosmetics.buildStyle;
+    return;
+  }
+  cosmetics.buildStyle = v;
+  saveAll();
+  toastMsg("Building style updated");
+});
 
 // ----------------------------
 // Splash
@@ -1531,9 +1877,12 @@ function runSplash() {
 
   initRain(rainDrops, canvas.width, canvas.height);
   initStars(stars, canvas.width, canvas.height);
+  initSnow(snow, canvas.width, canvas.height);
+
   if (previewCanvas) {
     initRain(previewRainDrops, previewCanvas.width, previewCanvas.height);
     initStars(previewStars, previewCanvas.width, previewCanvas.height);
+    initSnow(previewSnow, previewCanvas.width, previewCanvas.height);
   }
 
   soundToggle.checked = !!settings.soundOn;
@@ -1549,11 +1898,15 @@ function runSplash() {
   capeColor.value = cosmetics.cape;
   maskColor.value = cosmetics.mask;
 
-  if (cosmetics.trail !== "none" && !unlocks[cosmetics.trail]) cosmetics.trail = "none";
   trailSelect.value = cosmetics.trail;
+  auraSelect.value = cosmetics.aura;
+  buildStyleSelect.value = cosmetics.buildStyle;
 
   coinsText.textContent = String(coins);
   renderLocalBoard();
+
+  rebuildShop();
+  syncLocksToUI();
 
   shopPanel.classList.add("hidden");
   settingsPanel.classList.add("hidden");

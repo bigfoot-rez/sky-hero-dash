@@ -78,7 +78,7 @@ canvas{
 }
 
 .menuCard{
-  width: min(460px, 92vw);
+  width: min(520px, 92vw);
   background: rgba(255,255,255,0.92);
   border: 3px solid #000;
   border-radius: 16px;
@@ -209,7 +209,7 @@ canvas{
 }
 
 .scrollPanel{
-  max-height: min(72vh, 620px);
+  max-height: min(74vh, 680px);
   overflow: auto;
   -webkit-overflow-scrolling: touch;
 }

@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#0b1220" />
   <title>Sky Hero Dash</title>
-
-  <!-- cache-bust -->
-  <link rel="stylesheet" href="style.css?v=15" />
+  <link rel="stylesheet" href="style.css?v=16" />
 </head>
 <body>
   <!-- Splash -->
@@ -50,7 +48,7 @@
       <div class="menuCard">
         <div class="title">Sky Hero Dash</div>
         <div class="subtitle">Customize your hero, pick the vibe, then fly.</div>
-        <div class="versionText" id="versionText">v15</div>
+        <div class="versionText" id="versionText">v16</div>
 
         <div class="menuRow">
           <button id="playButton" class="btn big">Play</button>
@@ -73,22 +71,28 @@
             </label>
           </div>
 
-          <div class="panelTitle">Weather / Background</div>
+          <div class="panelTitle">Parallax Background</div>
           <div class="grid">
             <div class="field" style="grid-column: 1 / -1;">
               <div class="label">Theme</div>
               <select id="bgSelect">
                 <option value="city_day">City (Day)</option>
-                <option value="city_night">Night (City)</option>
+                <option value="city_night">City (Night)</option>
                 <option value="cloudy">Cloudy</option>
                 <option value="rainy">Rainy (City)</option>
+                <option value="sunset">Sunset</option>
+                <option value="neon">Neon Night</option>
+                <option value="desert">Desert</option>
+                <option value="forest">Forest</option>
+                <option value="snow">Snow</option>
               </select>
+              <div class="hint">More themes unlock in Shop.</div>
             </div>
 
             <div class="field" style="grid-column: 1 / -1;">
               <div class="label">Preview</div>
-              <canvas id="previewCanvas" width="320" height="160"></canvas>
-              <div class="hint">Live preview (rain + stars included).</div>
+              <canvas id="previewCanvas" width="320" height="180"></canvas>
+              <div class="hint">Preview animates the parallax layers.</div>
             </div>
           </div>
 
@@ -137,8 +141,8 @@
           <div class="grid">
             <div class="field" style="grid-column: 1 / -1;">
               <div class="label">Hero Preview</div>
-              <canvas id="heroPreviewCanvas" width="320" height="160"></canvas>
-              <div class="hint">Cat/Fox/Bee/Skeleton now look unique.</div>
+              <canvas id="heroPreviewCanvas" width="320" height="180"></canvas>
+              <div class="hint">Trails + Aura are cosmetic. Power-ups are gameplay.</div>
             </div>
 
             <div class="field">
@@ -192,6 +196,31 @@
                 <option value="neon">Neon (unlock)</option>
                 <option value="smoke">Smoke (unlock)</option>
                 <option value="confetti">Confetti (unlock)</option>
+                <option value="embers">Embers (unlock)</option>
+                <option value="bubbles">Bubbles (unlock)</option>
+                <option value="stars">Star Dust (unlock)</option>
+                <option value="glitch">Glitch (unlock)</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <div class="label">Aura</div>
+              <select id="auraSelect">
+                <option value="none">None</option>
+                <option value="halo">Halo (unlock)</option>
+                <option value="shadow">Shadow (unlock)</option>
+                <option value="pulse">Pulse (unlock)</option>
+                <option value="frost">Frost (unlock)</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <div class="label">Building Style</div>
+              <select id="buildStyleSelect">
+                <option value="brick">Brick</option>
+                <option value="glass">Glass (unlock)</option>
+                <option value="neon">Neon (unlock)</option>
+                <option value="stone">Stone (unlock)</option>
               </select>
             </div>
           </div>
@@ -202,14 +231,9 @@
           </div>
 
           <div id="shopPanel" class="panel subtle hidden">
-            <div class="panelTitle">Unlockables</div>
-            <div class="shopList">
-              <button id="buySpark" class="btn small">Buy Spark Trail (50)</button>
-              <button id="buyNeon" class="btn small">Buy Neon Trail (120)</button>
-              <button id="buySmoke" class="btn small">Buy Smoke Trail (80)</button>
-              <button id="buyConfetti" class="btn small">Buy Confetti Trail (160)</button>
-            </div>
-            <div class="hint">Coins: pass buildings (+1), grab power-ups (+5), end-of-run bonus.</div>
+            <div class="panelTitle">Unlock Shop</div>
+            <div id="shopList" class="shopList"></div>
+            <div class="hint">Earn coins by passing buildings (+1), grabbing power-ups (+5), and end-of-run bonus.</div>
           </div>
 
           <div class="menuRow">
@@ -229,7 +253,6 @@
     <div id="toast" class="toast hidden"></div>
   </div>
 
-  <!-- cache-bust -->
-  <script src="game.js?v=15"></script>
+  <script src="game.js?v=16"></script>
 </body>
 </html>
