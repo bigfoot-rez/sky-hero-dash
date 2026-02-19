@@ -3,7 +3,7 @@
 // v19: Fix unlockables selectable after purchase (trail/aura/buildings). Everything else unchanged.
 // ============================
 
-const APP_VERSION = "v22";
+const APP_VERSION = "v23";
 
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -298,10 +298,15 @@ function loadAll() {
 
 function getName() { return localStorage.getItem(LS.name) || ""; }
 function setName(n) {
-  const name = (n || "").trim().slice(0, 16);
-  if (!name) return false;
-  localStorage.setItem(LS.name, name);
-  playerNameText.textContent = name;
+  const clean = (n || "").trim().slice(0, 16);
+  if (!clean) return false;
+
+  localStorage.setItem(LS.name, clean);
+
+  const playerNameEl = document.getElementById("playerName");
+  if (playerNameEl) playerNameEl.textContent = clean;
+
+  renderLocalBoard();
   return true;
 }
 function ensureName() {
@@ -339,19 +344,24 @@ function submitLocalScore(name, s) {
   renderLocalBoard();
 }
 function renderLocalBoard() {
+  const el = document.getElementById("localLeaderboard");
+  if (!el) return;
+
   const board = loadLocalBoard().slice(0, 5);
-  localLeaderboardEl.innerHTML = "";
+  el.innerHTML = "";
+
   if (board.length === 0) {
     const li = document.createElement("li");
     li.textContent = "No scores yet.";
-    localLeaderboardEl.appendChild(li);
+    el.appendChild(li);
     return;
   }
-  for (const e of board) {
+
+  board.forEach((entry) => {
     const li = document.createElement("li");
-    li.textContent = `${e.name}: ${e.score}`;
-    localLeaderboardEl.appendChild(li);
-  }
+    li.textContent = `: `;
+    el.appendChild(li);
+  });
 }
 
 // Rounded rect helper
@@ -2091,49 +2101,17 @@ function runSplash() {
 }
 
 // Boot
-(function boot() {
-  if (versionText) versionText.textContent = APP_VERSION;
+$&
 
-  runSplash();
-  loadAll();
+// Couch-coop: allow name change from overlays
+(function hookNameButtons(){
+  const overlayChange = document.getElementById("overlayChangeName");
+  if (overlayChange) overlayChange.addEventListener("click", () => {
+    promptName();
+  });
 
-  const name = ensureName();
-  playerNameText.textContent = name;
-
-  setSelectOptions(bodySelect, BODY_OPTIONS, cosmetics.body, "classic");
-  setSelectOptions(headSelect, HEAD_OPTIONS, cosmetics.head, "classic");
-  setSelectOptions(musicSelect, MUSIC_OPTIONS, settings.music, "chill");
-  setSelectOptions(bgSelect, Object.entries(THEME_META).map(([k,v]) => [k, v.label]), settings.background, "city_day");
-
-  initRain(rainDrops, canvas.width, canvas.height);
-  initStars(stars, canvas.width, canvas.height);
-  initSnow(snow, canvas.width, canvas.height);
-
-  if (previewCanvas) {
-    initRain(previewRainDrops, previewCanvas.width, previewCanvas.height);
-    initStars(previewStars, previewCanvas.width, previewCanvas.height);
-    initSnow(previewSnow, previewCanvas.width, previewCanvas.height);
-  }
-
-  soundToggle.checked = !!settings.soundOn;
-  musicToggle.checked = !!settings.musicOn;
-
-  sfxSelect.value = settings.sfxPack;
-
-  suitColor.value = cosmetics.suit;
-  capeColor.value = cosmetics.cape;
-  maskColor.value = cosmetics.mask;
-
-  coinsText.textContent = String(coins);
-  renderLocalBoard();
-
-  rebuildShop();
-  syncLocksToUI();
-
-  shopPanel.classList.add("hidden");
-  settingsPanel.classList.add("hidden");
-  menu.classList.remove("hidden");
-
-  initGame();
-  loop();
+  const menuChange = document.getElementById("menuChangeName");
+  if (menuChange) menuChange.addEventListener("click", () => {
+    promptName();
+  });
 })();
