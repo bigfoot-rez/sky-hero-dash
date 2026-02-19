@@ -3,7 +3,7 @@
 // v19: Fix unlockables selectable after purchase (trail/aura/buildings). Everything else unchanged.
 // ============================
 
-const APP_VERSION = "v22";
+const APP_VERSION = "v23";
 
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -2136,4 +2136,81 @@ function runSplash() {
 
   initGame();
   loop();
+})();
+
+/* v23 couch-coop: name change shortcuts that work even with overlays */
+(function couchCoopNameShortcuts() {
+  if (window.__skybopNameShortcutsInstalled) return;
+  window.__skybopNameShortcutsInstalled = true;
+
+  // Keyboard: N changes name (Chromebook/laptop)
+  document.addEventListener("keydown", (e) => {
+    if (e.repeat) return;
+    if (e.code !== "KeyN") return;
+
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
+    if (tag === "input" || tag === "textarea") return;
+
+    e.preventDefault();
+    if (typeof promptName === "function") promptName();
+  });
+
+  // Mobile universal gesture: 2-finger tap anywhere to change name
+  // (works even when a pause overlay is intercepting single touches)
+  let activeTouchIds = new Set();
+  let firstDownAt = 0;
+
+  document.addEventListener("touchstart", (e) => {
+    // Track touch identifiers
+    for (const t of Array.from(e.changedTouches || [])) activeTouchIds.add(t.identifier);
+    if (activeTouchIds.size === 1) firstDownAt = Date.now();
+
+    // If two fingers are down quickly, trigger
+    if (activeTouchIds.size === 2) {
+      const dt = Date.now() - firstDownAt;
+      if (dt <= 450) {
+        if (typeof promptName === "function") promptName();
+      }
+    }
+  }, { passive: true });
+
+  document.addEventListener("touchend", (e) => {
+    for (const t of Array.from(e.changedTouches || [])) activeTouchIds.delete(t.identifier);
+    if (activeTouchIds.size === 0) firstDownAt = 0;
+  }, { passive: true });
+
+  document.addEventListener("touchcancel", (e) => {
+    for (const t of Array.from(e.changedTouches || [])) activeTouchIds.delete(t.identifier);
+    if (activeTouchIds.size === 0) firstDownAt = 0;
+  }, { passive: true });
+
+  // Also allow long-press anywhere (fallback) — but only when not moving
+  let pressTimer = null;
+  let startX = 0, startY = 0;
+
+  document.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "touch") return;
+    startX = e.clientX; startY = e.clientY;
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      if (typeof promptName === "function") promptName();
+    }, 900);
+  }, { passive: true });
+
+  document.addEventListener("pointermove", (e) => {
+    if (!pressTimer) return;
+    const dx = Math.abs(e.clientX - startX);
+    const dy = Math.abs(e.clientY - startY);
+    if (dx > 12 || dy > 12) { clearTimeout(pressTimer); pressTimer = null; }
+  }, { passive: true });
+
+  document.addEventListener("pointerup", () => {
+    clearTimeout(pressTimer);
+    pressTimer = null;
+  }, { passive: true });
+
+  document.addEventListener("pointercancel", () => {
+    clearTimeout(pressTimer);
+    pressTimer = null;
+  }, { passive: true });
 })();
