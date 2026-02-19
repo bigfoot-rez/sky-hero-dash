@@ -2420,3 +2420,62 @@ function runSplash() {
     };
   } catch {}
 })();
+/* v26: triple-tap to change name ONLY while paused or in menus (no gameplay interference) */
+(function v26TripleTapNamePausedOnly() {
+  if (window.__skybopTripleTapNameV26) return;
+  window.__skybopTripleTapNameV26 = true;
+
+  function allowAndPromptName() {
+    window.__skybopAllowNamePrompt = true;
+    try { if (typeof window.promptName === "function") window.promptName(); } catch {}
+    window.__skybopAllowNamePrompt = false;
+  }
+
+  function allowedContext() {
+    // Allowed if pause overlay shows "Paused"
+    try {
+      const overlay = document.getElementById("overlay");
+      const title = document.getElementById("overlayTitle");
+      if (overlay && !overlay.classList.contains("hidden")) {
+        const t = (title && title.textContent ? title.textContent : "").toLowerCase();
+        if (t.includes("paused")) return true;
+      }
+    } catch {}
+
+    // Allowed if home menu visible
+    try {
+      const menu = document.getElementById("menu");
+      if (menu && !menu.classList.contains("hidden")) return true;
+    } catch {}
+
+    // Allowed if settings/shop panels visible
+    try {
+      const settingsPanel = document.getElementById("settingsPanel");
+      if (settingsPanel && !settingsPanel.classList.contains("hidden")) return true;
+    } catch {}
+    try {
+      const shopPanel = document.getElementById("shopPanel");
+      if (shopPanel && !shopPanel.classList.contains("hidden")) return true;
+    } catch {}
+
+    return false;
+  }
+
+  let taps = 0;
+  let t0 = 0;
+
+  document.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "touch") return;
+    if (!allowedContext()) return;
+
+    const now = Date.now();
+    if (now - t0 > 650) taps = 0;
+    t0 = now;
+    taps += 1;
+
+    if (taps >= 3) {
+      taps = 0;
+      allowAndPromptName();
+    }
+  }, { passive: true });
+})();

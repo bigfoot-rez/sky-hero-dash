@@ -328,3 +328,19 @@ body{
   font-weight: 800;
   font-size: 12px;
 }
+
+/* v25: name change hint */
+#changeNameButton {
+  pointer-events: none;
+  opacity: 0.85;
+  font-size: 0.9em;
+  padding: 6px 10px;
+}
+
+/* v25: name change hint */
+#changeNameButton {
+  pointer-events: none;
+  opacity: 0.85;
+  font-size: 0.9em;
+  padding: 6px 10px;
+}
