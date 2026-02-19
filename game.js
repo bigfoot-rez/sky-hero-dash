@@ -402,20 +402,20 @@ function oscNote(freq, durationMs, type, gainVal) {
 function sfxParams(kind) {
   const pack = settings.sfxPack;
   if (pack === "classic") {
-    if (kind === "flap")  return { f: 420, d: 60,  t: "square",   g: 0.06 };
+    if (kind === "boost")  return { f: 420, d: 60,  t: "square",   g: 0.06 };
     if (kind === "score") return { f: 620, d: 70,  t: "sine",     g: 0.07 };
     if (kind === "power") return { f: 880, d: 110, t: "triangle", g: 0.07 };
     if (kind === "dash")  return { f: 980, d: 90,  t: "sawtooth", g: 0.06 };
     return                { f: 160, d: 180, t: "sawtooth", g: 0.06 };
   }
   if (pack === "heroic") {
-    if (kind === "flap")  return { f: 520, d: 70,  t: "triangle", g: 0.07 };
+    if (kind === "boost")  return { f: 520, d: 70,  t: "triangle", g: 0.07 };
     if (kind === "score") return { f: 740, d: 90,  t: "triangle", g: 0.07 };
     if (kind === "power") return { f: 980, d: 140, t: "sine",     g: 0.07 };
     if (kind === "dash")  return { f: 1180,d: 110, t: "square",   g: 0.06 };
     return                { f: 110, d: 220, t: "sawtooth", g: 0.07 };
   }
-  if (kind === "flap")  return { f: 300, d: 55,  t: "square", g: 0.06 };
+  if (kind === "boost")  return { f: 300, d: 55,  t: "square", g: 0.06 };
   if (kind === "score") return { f: 460, d: 75,  t: "square", g: 0.06 };
   if (kind === "power") return { f: 620, d: 120, t: "square", g: 0.06 };
   if (kind === "dash")  return { f: 820, d: 90,  t: "square", g: 0.06 };
@@ -663,7 +663,7 @@ function startPlay() {
 
   hideOverlayHard();
   ensureAudio();
-  playSfx("flap");
+  playSfx("boost");
   ensureMusicState();
 }
 
@@ -1860,7 +1860,7 @@ function handleTapAction() {
   }
 
   hero.vy = BASE_LIFT;
-  playSfx("flap");
+  playSfx("boost");
 }
 
 canvas.addEventListener("pointerdown", (e) => {
@@ -2059,7 +2059,7 @@ sfxSelect.addEventListener("change", () => {
   saveAll();
   toastMsg(`SFX Pack: ${sfxSelect.options[sfxSelect.selectedIndex].text}`);
 });
-sfxTestFlap.addEventListener("click", () => { ensureAudio(); playSfx("flap"); });
+sfxTestFlap.addEventListener("click", () => { ensureAudio(); playSfx("boost"); });
 sfxTestScore.addEventListener("click", () => { ensureAudio(); playSfx("score"); });
 sfxTestPower.addEventListener("click", () => { ensureAudio(); playSfx("power"); });
 sfxTestCrash.addEventListener("click", () => { ensureAudio(); playSfx("crash"); });
