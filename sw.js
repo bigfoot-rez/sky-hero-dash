@@ -1,5 +1,5 @@
-/* Skybop Dash Service Worker */
-const CACHE = "skybopdash-v21-force";
+/* Skybop Dash Service Worker (v21) */
+const CACHE = "skybopdash-v21";
 const CORE = [
   "./",
   "./index.html",
@@ -12,51 +12,31 @@ const CORE = [
   "./apple-touch-icon.png"
 ];
 
-self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)));
+self.addEventListener("install", (event) => {
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(CORE)));
   self.skipWaiting();
 });
 
-self.addEventListener("activate", (e) => {
-  e.waitUntil(
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.map((k) => (k !== CACHE ? caches.delete(k) : null)))
+      Promise.all(keys.map((k) => (k === CACHE ? null : caches.delete(k))))
     )
   );
   self.clients.claim();
 });
 
-self.addEventListener("fetch", (e) => {
-  const req = e.request;
-  const url = new URL(req.url);
-  if (req.method !== "GET" || url.origin !== self.location.origin) return;
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET") return;
 
-  const wantsHTML = req.headers.get("accept")?.includes("text/html");
-
-  // Always try network first for HTML so new builds propagate
-  if (wantsHTML) {
-    e.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
-          return res;
-        })
-        .catch(() => caches.match("./index.html"))
-    );
-    return;
-  }
-
-  // Cache-first for assets
-  e.respondWith(
-    caches.match(req).then(
-      (hit) =>
-        hit ||
-        fetch(req).then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
-          return res;
-        })
-    )
+  event.respondWith(
+    fetch(req)
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((cache) => cache.put(req, copy));
+        return res;
+      })
+      .catch(() => caches.match(req).then((hit) => hit || caches.match("./index.html")))
   );
 });
