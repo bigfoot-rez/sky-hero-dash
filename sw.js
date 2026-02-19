@@ -1,5 +1,5 @@
 /* Skybop Dash Service Worker */
-const CACHE = "skybopdash-v20";
+const CACHE = "skybopdash-v20-icons";
 const CORE = [
   "./",
   "./index.html",
@@ -32,6 +32,8 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET" || url.origin !== self.location.origin) return;
 
   const wantsHTML = req.headers.get("accept")?.includes("text/html");
+
+  // Network-first for HTML so updates propagate
   if (wantsHTML) {
     e.respondWith(
       fetch(req)
@@ -40,16 +42,23 @@ self.addEventListener("fetch", (e) => {
           caches.open(CACHE).then((c) => c.put(req, copy));
           return res;
         })
-        .catch(() => caches.match(req).then((hit) => hit || caches.match("./index.html")))
+        .catch(() =>
+          caches.match(req).then((hit) => hit || caches.match("./index.html"))
+        )
     );
     return;
   }
 
+  // Cache-first for assets
   e.respondWith(
-    caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(req, copy));
-      return res;
-    }))
+    caches.match(req).then(
+      (hit) =>
+        hit ||
+        fetch(req).then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy));
+          return res;
+        })
+    )
   );
 });
