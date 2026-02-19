@@ -1,11 +1,11 @@
 /* Skybop Dash Service Worker */
-const CACHE = "skybopdash-v20-icons";
+const CACHE = "skybopdash-v21";
 const CORE = [
   "./",
   "./index.html",
-  "./style.css?v=20",
-  "./game.js?v=20",
-  "./manifest.webmanifest?v=20",
+  "./style.css?v=21",
+  "./game.js?v=21",
+  "./manifest.webmanifest?v=21",
   "./icon.svg",
   "./icon-192.png",
   "./icon-512.png",
