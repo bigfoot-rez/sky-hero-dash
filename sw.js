@@ -1,5 +1,5 @@
 /* Skybop Dash Service Worker */
-const CACHE = "skybopdash-v21";
+const CACHE = "skybopdash-v21-force";
 const CORE = [
   "./",
   "./index.html",
@@ -33,7 +33,7 @@ self.addEventListener("fetch", (e) => {
 
   const wantsHTML = req.headers.get("accept")?.includes("text/html");
 
-  // Network-first for HTML so updates propagate
+  // Always try network first for HTML so new builds propagate
   if (wantsHTML) {
     e.respondWith(
       fetch(req)
@@ -42,9 +42,7 @@ self.addEventListener("fetch", (e) => {
           caches.open(CACHE).then((c) => c.put(req, copy));
           return res;
         })
-        .catch(() =>
-          caches.match(req).then((hit) => hit || caches.match("./index.html"))
-        )
+        .catch(() => caches.match("./index.html"))
     );
     return;
   }
