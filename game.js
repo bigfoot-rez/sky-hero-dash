@@ -3,7 +3,7 @@
 // v19: Fix unlockables selectable after purchase (trail/aura/buildings). Everything else unchanged.
 // ============================
 
-const APP_VERSION = "v23";
+const APP_VERSION = "v24";
 
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -2213,4 +2213,41 @@ function runSplash() {
     clearTimeout(pressTimer);
     pressTimer = null;
   }, { passive: true });
+})();
+
+/* v24 monetization foundation (SAFE - no payment yet) */
+(function vipFoundation() {
+  const VIP_KEY = "skybop_vip";
+  const CONTINUE_KEY = "skybop_continues";
+
+  // Initialize
+  if (!localStorage.getItem(CONTINUE_KEY)) {
+    localStorage.setItem(CONTINUE_KEY, "0");
+  }
+
+  window.isVIP = function () {
+    return localStorage.getItem(VIP_KEY) === "true";
+  };
+
+  window.getContinues = function () {
+    return parseInt(localStorage.getItem(CONTINUE_KEY) || "0", 10);
+  };
+
+  window.addContinues = function (amount) {
+    const current = window.getContinues();
+    localStorage.setItem(CONTINUE_KEY, String(current + amount));
+  };
+
+  window.useContinue = function () {
+    const current = window.getContinues();
+    if (current <= 0) return false;
+    localStorage.setItem(CONTINUE_KEY, String(current - 1));
+    return true;
+  };
+
+  window.unlockVIPLocal = function () {
+    localStorage.setItem(VIP_KEY, "true");
+    window.addContinues(5);
+    console.log("VIP unlocked locally for testing.");
+  };
 })();
