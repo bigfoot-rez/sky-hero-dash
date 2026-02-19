@@ -2251,3 +2251,172 @@ function runSplash() {
     console.log("VIP unlocked locally for testing.");
   };
 })();
+
+/* v24: VIP continues foundation + SAFE gestures (LOCKED prompts, robust gameover detect) */
+(function v24VipContinuesAndGestures() {
+  if (window.__skybopV24GesturesInstalled) return;
+  window.__skybopV24GesturesInstalled = true;
+
+  const VIP_KEY = "skybop_vip";
+  const CONTINUE_KEY = "skybop_continues";
+
+  if (!localStorage.getItem(CONTINUE_KEY)) localStorage.setItem(CONTINUE_KEY, "0");
+
+  function isVIP() { return localStorage.getItem(VIP_KEY) === "true"; }
+  function getContinues() { return parseInt(localStorage.getItem(CONTINUE_KEY) || "0", 10) || 0; }
+  function setContinues(n) { localStorage.setItem(CONTINUE_KEY, String(Math.max(0, n|0))); }
+
+  // Local test helper
+  window.unlockVIPLocal = function () {
+    localStorage.setItem(VIP_KEY, "true");
+    setContinues(getContinues() + 5);
+    try { if (typeof toastMsg === "function") toastMsg("VIP enabled (local test)"); } catch {}
+  };
+
+  // HARD prompt lock (prevents triple prompt)
+  let prompting = false;
+  function promptNameLocked() {
+    if (prompting) return;
+    prompting = true;
+    try { if (typeof promptName === "function") promptName(); } catch {}
+    prompting = false;
+  }
+
+  // Robust "game over" detection:
+  // 1) use gameOver variable if it exists
+  // 2) otherwise, check overlay title text for "Game Over"
+  function isGameOverNow() {
+    try {
+      if (typeof gameOver !== "undefined") return !!gameOver;
+    } catch {}
+
+    try {
+      const overlay = document.getElementById("overlay");
+      const title = document.getElementById("overlayTitle");
+      if (!overlay || overlay.classList.contains("hidden")) return false;
+      if (!title) return false;
+      return (title.textContent || "").toLowerCase().includes("game over");
+    } catch {}
+    return false;
+  }
+
+  function tryContinue() {
+    if (!isGameOverNow()) return false;
+
+    if (!isVIP()) {
+      try { if (typeof toastMsg === "function") toastMsg("VIP required to continue."); } catch {}
+      return true;
+    }
+
+    const c = getContinues();
+    if (c <= 0) {
+      try { if (typeof toastMsg === "function") toastMsg("No continues left."); } catch {}
+      return true;
+    }
+
+    let savedScore = 0;
+    try { if (typeof score !== "undefined") savedScore = score|0; } catch {}
+
+    setContinues(c - 1);
+
+    try { if (typeof reset === "function") reset(); } catch {}
+    try { if (typeof startPlay === "function") startPlay(); } catch {}
+
+    try { if (typeof score !== "undefined") score = savedScore; } catch {}
+    try { if (typeof scoreText !== "undefined" && scoreText) scoreText.textContent = String(savedScore); } catch {}
+
+    try { if (typeof toastMsg === "function") toastMsg(`Continued! (${getContinues()} left)`); } catch {}
+    return true;
+  }
+
+  // Keyboard: N = name, C = continue (on game over)
+  document.addEventListener("keydown", (e) => {
+    if (e.repeat) return;
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
+    if (tag === "input" || tag === "textarea") return;
+
+    if (e.code === "KeyN") { e.preventDefault(); promptNameLocked(); }
+    if (e.code === "KeyC") { e.preventDefault(); tryContinue(); }
+  });
+
+  // Touch: two-finger tap = continue (ONLY on game over)
+  let activeTouchIds = new Set();
+  let firstDownAt = 0;
+
+  document.addEventListener("touchstart", (e) => {
+    for (const t of Array.from(e.changedTouches || [])) activeTouchIds.add(t.identifier);
+    if (activeTouchIds.size === 1) firstDownAt = Date.now();
+
+    if (activeTouchIds.size === 2) {
+      const dt = Date.now() - firstDownAt;
+      if (dt <= 450) {
+        tryContinue();
+      }
+    }
+  }, { passive: true });
+
+  document.addEventListener("touchend", (e) => {
+    for (const t of Array.from(e.changedTouches || [])) activeTouchIds.delete(t.identifier);
+    if (activeTouchIds.size === 0) firstDownAt = 0;
+  }, { passive: true });
+
+  document.addEventListener("touchcancel", (e) => {
+    for (const t of Array.from(e.changedTouches || [])) activeTouchIds.delete(t.identifier);
+    if (activeTouchIds.size === 0) firstDownAt = 0;
+  }, { passive: true });
+
+  // Name change on mobile: long-press ONLY playerName, and LOCKED
+  const nameEl = document.getElementById("playerName");
+  if (nameEl) {
+    let timer = null;
+
+    function cancel() { if (timer) clearTimeout(timer); timer = null; }
+
+    nameEl.addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "touch") return;
+      if (activeTouchIds.size > 1) return; // don’t steal 2-finger continue
+      cancel();
+      timer = setTimeout(() => {
+        promptNameLocked();
+        cancel();
+      }, 650);
+    }, { passive: true });
+
+    nameEl.addEventListener("pointerup", cancel, { passive: true });
+    nameEl.addEventListener("pointercancel", cancel, { passive: true });
+    nameEl.addEventListener("pointerleave", cancel, { passive: true });
+  }
+})();
+
+/* v24-hotfix: prevent multi-touch from triggering nickname prompt spam */
+(function multiTouchNameGuard() {
+  if (window.__skybopMultiTouchGuard) return;
+  window.__skybopMultiTouchGuard = true;
+
+  let multiTouch = false;
+
+  // Track if 2+ touches are down
+  document.addEventListener("touchstart", (e) => {
+    const n = (e.touches && e.touches.length) ? e.touches.length : 0;
+    if (n >= 2) multiTouch = true;
+  }, { passive: true, capture: true });
+
+  document.addEventListener("touchend", (e) => {
+    const n = (e.touches && e.touches.length) ? e.touches.length : 0;
+    if (n < 2) multiTouch = false;
+  }, { passive: true, capture: true });
+
+  document.addEventListener("touchcancel", () => {
+    multiTouch = false;
+  }, { passive: true, capture: true });
+
+  // Wrap prompt() so if any old listener tries to prompt during multi-touch, it gets ignored.
+  // This is SAFE because we only block while multiTouch is true.
+  try {
+    const _prompt = window.prompt;
+    window.prompt = function (...args) {
+      if (multiTouch) return null;
+      return _prompt.apply(window, args);
+    };
+  } catch {}
+})();
