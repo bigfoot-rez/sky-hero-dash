@@ -2,7 +2,7 @@
   "name": "Skybop Dash",
   "short_name": "Skybop",
   "description": "Skybop Dash — a fast arcade skyline runner by Meek Rez.",
-  "start_url": "./?source=pwa",
+  "start_url": "./?v=27",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0b1020",
